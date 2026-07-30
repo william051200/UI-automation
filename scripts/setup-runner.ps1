@@ -193,7 +193,8 @@ if (-not (Test-Path (Join-Path $InstallRoot 'config.cmd'))) {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $InstallRoot)
 }
 
-# --- Configure -----------------------------------------------------------
+# --- Configure runner (NOT as service: UI automation needs the interactive
+#     desktop, and Windows services run in Session 0 with no UI access) ----
 Write-Step "Configuring runner as '$Label' against $Repo..."
 $runnerUrl = "https://github.com/$Repo"
 & .\config.cmd `
@@ -206,13 +207,38 @@ $runnerUrl = "https://github.com/$Repo"
     --replace
 if ($LASTEXITCODE -ne 0) { throw "config.cmd failed with exit code $LASTEXITCODE" }
 
-# --- Install as Windows service ------------------------------------------
-Write-Step "Installing runner as a Windows service..."
-& .\svc.cmd install
-& .\svc.cmd start
-if ($LASTEXITCODE -ne 0) { throw "svc.cmd start failed with exit code $LASTEXITCODE" }
+Write-Ok "Runner '$Label' registered."
 
-Write-Ok "Runner '$Label' installed and started as a Windows service."
+# --- Launch runner in the interactive session ----------------------------
+# UI automation requires the desktop, so we start run.cmd in a visible
+# PowerShell window that the tester leaves open (screens stay unlocked
+# at all times per team policy).
+Write-Step "Starting runner in a new PowerShell window..."
+$runCmd = Join-Path $InstallRoot 'run.cmd'
+Start-Process -FilePath 'powershell.exe' `
+    -ArgumentList @('-NoExit', '-Command', "Set-Location '$InstallRoot'; & '$runCmd'") `
+    -WorkingDirectory $InstallRoot | Out-Null
+Write-Ok "Runner launched. Leave that PowerShell window open -- closing it stops the runner."
+
+# --- Create a Scheduled Task so the runner auto-starts on user logon -----
+Write-Step "Registering Scheduled Task 'GHRunner-$Label' to auto-start on logon..."
+try {
+    $taskName = "GHRunner-$Label"
+    $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+        -Argument "-NoExit -Command `"Set-Location '$InstallRoot'; & '$runCmd'`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Write-Ok "Scheduled Task '$taskName' created. Runner auto-starts on logon."
+} catch {
+    Write-Warn "Could not register Scheduled Task: $_"
+    Write-Warn "Runner will still work now, but you'll need to manually run:"
+    Write-Warn "  cd $InstallRoot; .\run.cmd"
+    Write-Warn "after each reboot/logon."
+}
 
 # --- Update workflow YAML to expose this label in the dropdown ------------
 Write-Step "Adding '$Label' to .github/workflows/run-ui-tests.yml..."
