@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Register the current DevBox as a self-hosted GitHub Actions runner
     for the UI-automation repository.
@@ -155,7 +155,7 @@ Write-Ok "uv: $(uv --version)"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     # uv will fetch python on first `uv sync`; nothing to install here.
-    Write-Warn "python not on PATH — uv will provision one on first sync."
+    Write-Warn "python not on PATH -- uv will provision one on first sync."
 } else {
     Write-Ok "python: $(python --version)"
 }
@@ -224,7 +224,7 @@ if (-not (Test-Path $workflow)) {
 } else {
     $content = Get-Content -Path $workflow -Raw
     if ($content -match [regex]::Escape("- $Label")) {
-        Write-Ok "Label '$Label' is already present in the workflow — nothing to do."
+        Write-Ok "Label '$Label' is already present in the workflow -- nothing to do."
     } else {
         # Insert a new entry as the LAST line inside target_devbox.options.
         # Pattern: find the target_devbox: options: block, then the last
