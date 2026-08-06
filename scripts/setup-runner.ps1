@@ -155,7 +155,7 @@ Write-Ok "uv: $(uv --version)"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     # uv will fetch python on first `uv sync`; nothing to install here.
-    Write-Warn "python not on PATH -- uv will provision one on first sync."
+    Write-Warn "python not on PATH — uv will provision one on first sync."
 } else {
     Write-Ok "python: $(python --version)"
 }
@@ -193,8 +193,7 @@ if (-not (Test-Path (Join-Path $InstallRoot 'config.cmd'))) {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $InstallRoot)
 }
 
-# --- Configure runner (NOT as service: UI automation needs the interactive
-#     desktop, and Windows services run in Session 0 with no UI access) ----
+# --- Configure -----------------------------------------------------------
 Write-Step "Configuring runner as '$Label' against $Repo..."
 $runnerUrl = "https://github.com/$Repo"
 & .\config.cmd `
@@ -207,38 +206,13 @@ $runnerUrl = "https://github.com/$Repo"
     --replace
 if ($LASTEXITCODE -ne 0) { throw "config.cmd failed with exit code $LASTEXITCODE" }
 
-Write-Ok "Runner '$Label' registered."
+# --- Install as Windows service ------------------------------------------
+Write-Step "Installing runner as a Windows service..."
+& .\svc.cmd install
+& .\svc.cmd start
+if ($LASTEXITCODE -ne 0) { throw "svc.cmd start failed with exit code $LASTEXITCODE" }
 
-# --- Launch runner in the interactive session ----------------------------
-# UI automation requires the desktop, so we start run.cmd in a visible
-# PowerShell window that the tester leaves open (screens stay unlocked
-# at all times per team policy).
-Write-Step "Starting runner in a new PowerShell window..."
-$runCmd = Join-Path $InstallRoot 'run.cmd'
-Start-Process -FilePath 'powershell.exe' `
-    -ArgumentList @('-NoExit', '-Command', "Set-Location '$InstallRoot'; & '$runCmd'") `
-    -WorkingDirectory $InstallRoot | Out-Null
-Write-Ok "Runner launched. Leave that PowerShell window open -- closing it stops the runner."
-
-# --- Create a Scheduled Task so the runner auto-starts on user logon -----
-Write-Step "Registering Scheduled Task 'GHRunner-$Label' to auto-start on logon..."
-try {
-    $taskName = "GHRunner-$Label"
-    $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-        -Argument "-NoExit -Command `"Set-Location '$InstallRoot'; & '$runCmd'`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-    Write-Ok "Scheduled Task '$taskName' created. Runner auto-starts on logon."
-} catch {
-    Write-Warn "Could not register Scheduled Task: $_"
-    Write-Warn "Runner will still work now, but you'll need to manually run:"
-    Write-Warn "  cd $InstallRoot; .\run.cmd"
-    Write-Warn "after each reboot/logon."
-}
+Write-Ok "Runner '$Label' installed and started as a Windows service."
 
 # --- Update workflow YAML to expose this label in the dropdown ------------
 Write-Step "Adding '$Label' to .github/workflows/run-ui-tests.yml..."
@@ -250,7 +224,7 @@ if (-not (Test-Path $workflow)) {
 } else {
     $content = Get-Content -Path $workflow -Raw
     if ($content -match [regex]::Escape("- $Label")) {
-        Write-Ok "Label '$Label' is already present in the workflow -- nothing to do."
+        Write-Ok "Label '$Label' is already present in the workflow — nothing to do."
     } else {
         # Insert a new entry as the LAST line inside target_devbox.options.
         # Pattern: find the target_devbox: options: block, then the last
