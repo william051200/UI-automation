@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Register the current DevBox as a self-hosted GitHub Actions runner
     for the UI-automation repository.
