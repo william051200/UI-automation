@@ -35,6 +35,21 @@ def main():
                     pass
         except Exception:
             continue
+    # Some consoles (e.g. Windows Terminal-hosted, as used by VS 18's
+    # "Start Without Debugging") expose the buffer as a plain Text control
+    # instead of Document. Prefer the longest Text control's window_text.
+    best = ""
+    for c in texts:
+        try:
+            if c.element_info.control_type == "Text":
+                t = c.window_text()
+                if t and len(t) > len(best):
+                    best = t
+        except Exception:
+            continue
+    if len(best) > 50:
+        print(best)
+        return
     # Last resort: dump every visible text
     out = []
     for c in texts:
