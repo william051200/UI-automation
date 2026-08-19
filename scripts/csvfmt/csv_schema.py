@@ -52,12 +52,12 @@ CONFIG_COLUMNS = ["Section", "Key", "Value"]
 
 # Top-level spec key order preserved in the loaded spec dict.
 SPEC_KEY_ORDER = [
-    "name", "description", "inputs", "artifacts", "timing",
+    "name", "description", "inputs", "artifacts", "timing", "retry",
     "steps", "expected_results",
 ]
 
 # Config sections that are flat key/value maps.
-CONFIG_MAP_SECTIONS = ["artifacts", "timing"]
+CONFIG_MAP_SECTIONS = ["artifacts", "timing", "retry"]
 
 
 def dumps(value):
