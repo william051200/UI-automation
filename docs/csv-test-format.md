@@ -39,10 +39,15 @@ Three columns: `Section | Key | Value`. Only what the runner needs:
 | `name` | one row; `Value` holds the test name |
 | `description` | one row |
 | `artifacts` | optional; `screenshot_dir` overrides the default folder name (see below). Omit this row to use the default. |
+| `retry` | optional; `toast_dismiss` set to `off` disables the runner's default toast-notification failure recovery for this case (see below); `toast_dismiss_var` pins recovery to a specific captured window instead of the auto-detected one. Omit this row to keep the default (recovery on, auto-detected window). |
 
 No `inputs`, `timing`, or `expected_results` block — those values live on the step rows; the runner tolerates their absence.
 
 **Screenshot folder naming:** by default the runner writes screenshots to `screenshots/{name}-{timestamp}` (e.g. `screenshots/powershell_echo_loop-20260812_014452Z`), where `{name}` is the CONFIG `name` value and `{timestamp}` is the UTC run start time — this makes it obvious which test case a folder belongs to. To use a custom folder for a specific test case, add `artifacts,screenshot_dir,<your/custom/path>` to `# CONFIG` (placeholders like `{name}`/`{timestamp}` still work there).
+
+**Toast-notification failure recovery:** transient OS/app toast notifications (a feature-promo popup, an update-available banner, a satisfaction-survey info-bar, ...) can render on top of a dialog button and silently swallow the click meant for it, so a later step fails even though nothing in the test itself was wrong. This recovery is **on by default for every test case** — no `# CONFIG` row or extra `# STEPS` rows are needed. When any step fails, the runner runs `scripts/window/dismiss_toasts.py` against whichever `vars.*hwnd` (any var named `hwnd` or ending in `_hwnd`) was most recently captured, re-runs the *previous* step (in case its click was the one swallowed), then retries the failed step once before giving up.
+
+To disable recovery for a case that doesn't need it (or where it would mask a real bug), add `retry,toast_dismiss,off` to `# CONFIG`. To target a specific captured window instead of the auto-detected one, add `retry,toast_dismiss_var,<vars name>`.
 
 ### `# STEPS` section
 

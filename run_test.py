@@ -75,6 +75,19 @@ class Ctx:
         self.shot_dir = os.path.join(ROOT, resolved_artifacts["screenshot_dir"])
         os.makedirs(self.shot_dir, exist_ok=True)
 
+        # Toast-notification failure recovery (see run_steps_retrying) is ON by
+        # default for every spec -- it targets whichever `vars.*hwnd` was most
+        # recently captured (see `capture()`), so no `# CONFIG` row is needed.
+        # A spec can opt out with `# CONFIG` row `retry,toast_dismiss,off`, or
+        # override the auto-detected window with `retry,toast_dismiss_var,<vars name>`.
+        retry_cfg = spec.get("retry") or {}
+        self.toast_dismiss_enabled = str(
+            retry_cfg.get("toast_dismiss", "on")).strip().lower() not in (
+            "off", "false", "0", "no")
+        self.toast_dismiss_var = retry_cfg.get("toast_dismiss_var")
+        self.last_hwnd = None
+        self.last_failed_step = None
+
 
 _expr_re = re.compile(r"\{([^{}]+)\}")
 
@@ -157,7 +170,12 @@ def capture(out_text, mapping, ctx):
             else:
                 raise ValueError(f"bad selector: {sel}")
         if dst.startswith("vars."):
-            ctx.vars[dst[5:]] = val
+            name = dst[5:]
+            ctx.vars[name] = val
+            # Track the most recently captured window handle (any var named/ending
+            # in "hwnd") as the default toast-dismiss target -- see dismiss_toasts.
+            if name == "hwnd" or name.endswith("_hwnd"):
+                ctx.last_hwnd = val
         else:
             raise ValueError(f"capture dst must start with vars.: {dst}")
 
@@ -177,6 +195,74 @@ def get_wait(ctx, val):
         return int(s) / 1000.0
     keyed = ctx.spec.get("timing", {}).get(s, 0)
     return int(keyed) / 1000.0
+
+
+def dismiss_toasts(ctx):
+    """Best-effort: dismiss transient toast/notification popups that can overlap a
+    dialog button and swallow a click, run when a step fails and toast recovery is
+    enabled. Enabled by default for every spec; a spec can opt out with `# CONFIG`
+    row `retry,toast_dismiss,off`.
+
+    Targets whichever `vars.*hwnd` was most recently captured (see `capture()`),
+    or the var named by `# CONFIG` row `retry,toast_dismiss_var,<vars name>` if
+    a spec wants to pin a specific window instead of the auto-detected one.
+
+    Returns False (nothing attempted) when the feature is disabled for this
+    spec, or no window handle has been captured yet (e.g. the failure happened
+    before the app launched) -- callers should treat that as "recovery not
+    applicable" and let the original failure stand. Returns True once an
+    attempt was made, regardless of whether a toast was actually present.
+    """
+    if not ctx.toast_dismiss_enabled:
+        return False
+    hwnd = ctx.vars.get(ctx.toast_dismiss_var) if ctx.toast_dismiss_var else None
+    if not hwnd:
+        hwnd = ctx.last_hwnd
+    if not hwnd:
+        return False
+    script = os.path.join(ROOT, "scripts", "window", "dismiss_toasts.py")
+    if not os.path.exists(script):
+        return False
+    p = subprocess.run([PY, script, str(hwnd)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if not QUIET:
+        for line in (p.stdout or "").rstrip().splitlines():
+            print(f"    [toast-recovery] {line}")
+        for line in (p.stderr or "").rstrip().splitlines():
+            print(f"    [toast-recovery] ! {line}")
+    return True
+
+
+def run_steps_retrying(steps_list, ctx, local_subs):
+    """Run a flat list of steps in order; on a step failure, attempt toast-
+    notification recovery and one retry pass before giving up.
+
+    A toast can swallow the click meant for the *previous* step's button (the
+    wizard never advances, so the failure only surfaces on this step), so
+    recovery re-runs the previous step -- not just this one -- before retrying
+    the step that actually failed. Runs at most one retry pass; a failure
+    during retry propagates normally.
+    """
+    i = 0
+    while i < len(steps_list):
+        step = steps_list[i]
+        try:
+            exec_step(step, ctx, local_subs)
+        except AssertionError as e:
+            ctx.last_failed_step = step.get("id")
+            if not dismiss_toasts(ctx):
+                raise
+            if not QUIET:
+                print(f"    step {step.get('id')} failed ({e}); "
+                      f"dismissed toast notification(s), retrying")
+            if i > 0:
+                prev = steps_list[i - 1]
+                if not QUIET:
+                    print(f"    re-running previous step {prev.get('id')} "
+                          f"in case its click was swallowed by the toast")
+                exec_step(prev, ctx, local_subs)
+            exec_step(step, ctx, local_subs)
+        i += 1
 
 
 def exec_step(step, ctx, local_subs):
@@ -210,8 +296,7 @@ def exec_step(step, ctx, local_subs):
                 print(f"\n--- while iter {i} ---")
             ctx.iter_failed[i] = False
             local = {"i": i, "n": i}
-            for sub in step["body"]:
-                exec_step(sub, ctx, {**local_subs, **local})
+            run_steps_retrying(step["body"], ctx, {**local_subs, **local})
         else:
             raise AssertionError(
                 f"while loop did not converge: condition still true after "
@@ -227,16 +312,12 @@ def exec_step(step, ctx, local_subs):
                 print(f"\n--- iter {i}: {var}={item!r} ---")
             local = {var: item, idx_var: i}
             ctx.iter_failed[i] = False
-            for sub in body:
-                try:
-                    exec_step(sub, ctx, {**local_subs, **local})
-                except AssertionError as e:
-                    print(f"    FAIL: {e}")
-                    ctx.iter_failed[i] = True
-                    if sub["type"] != "screenshot":
-                        # try to take the FAIL snapshot before bubbling
-                        pass
-                    raise
+            try:
+                run_steps_retrying(body, ctx, {**local_subs, **local})
+            except AssertionError as e:
+                print(f"    FAIL: {e}")
+                ctx.iter_failed[i] = True
+                raise
         return
 
     script = step.get("script")
@@ -293,13 +374,11 @@ def main():
     print(f"=== {spec.get('name')} ===")
     print(f"screenshot_dir: {ctx.shot_dir}")
     failed = False
-    for step in spec["steps"]:
-        try:
-            exec_step(step, ctx, {})
-        except AssertionError as e:
-            print(f"\n*** STEP FAILED: {step.get('id')}: {e}")
-            failed = True
-            break
+    try:
+        run_steps_retrying(spec["steps"], ctx, {})
+    except AssertionError as e:
+        print(f"\n*** STEP FAILED: {ctx.last_failed_step}: {e}")
+        failed = True
     print("\n=== RESULT:", "FAIL" if failed else "PASS", "===")
     sys.exit(1 if failed else 0)
 
