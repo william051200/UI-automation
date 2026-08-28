@@ -1,6 +1,6 @@
 # CONFIG
 Section,Key,Value
-name,,1-e2esanity-verify-dotnet-info
+name,,e2e-1-verify_dotnet_info
 description,,"Run `dotnet --info`, save its raw output as both a text file and a PNG ""screenshot"" in the artifact dir, and verify every version under `.NET SDKs installed:` and `.NET runtimes installed:` matches major.minor.patch (no build suffixes such as `-servicing-xxxxx.xx`)."
 
 # STEPS
