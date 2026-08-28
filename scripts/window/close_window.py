@@ -1,13 +1,14 @@
-"""Close a window by hwnd: graceful WM_CLOSE first, optional force-kill fallback.
+"""Close a window by hwnd: graceful WM_CLOSE first, optional process-exit wait and force-kill fallback.
 
 Sends WM_CLOSE to the window (same as clicking the X / Alt+F4). If the window
-or its owning process is still alive after --grace-ms, exits 2 unless --force
-is set, in which case the owning process is TerminateProcess'd.
+is still alive after --grace-ms, exits 2 unless --force is set. When
+--wait-process-ms is set, also waits for the owning process to exit after the
+window closes; if it remains alive, exits 2 or terminates it when --force is set.
 
 Exit codes:
   0  closed cleanly
   1  hwnd does not exist
-  2  window still alive after --grace-ms and --force not set
+  2  window or process still alive after its timeout and --force not set
   3  bad usage / unexpected error
 """
 import argparse, ctypes, sys, time
@@ -19,6 +20,7 @@ kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 WM_CLOSE = 0x0010
 PROCESS_TERMINATE = 0x0001
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+STILL_ACTIVE = 259
 
 user32.IsWindow.argtypes = [wintypes.HWND]; user32.IsWindow.restype = wintypes.BOOL
 user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
@@ -28,6 +30,8 @@ user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
 kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
 kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+kernel32.GetExitCodeProcess.restype = wintypes.BOOL
 kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
 kernel32.TerminateProcess.restype = wintypes.BOOL
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -44,8 +48,13 @@ def process_alive(pid):
     h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not h:
         return False
-    kernel32.CloseHandle(h)
-    return True
+    try:
+        exit_code = wintypes.DWORD(0)
+        if not kernel32.GetExitCodeProcess(h, ctypes.byref(exit_code)):
+            return False
+        return exit_code.value == STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(h)
 
 
 def force_kill(pid, exit_code=1):
@@ -68,6 +77,8 @@ def main():
     p.add_argument("--grace-ms", dest="grace_ms", type=int, default=2000,
                    help="how long to wait for WM_CLOSE to take effect (default 2000)")
     p.add_argument("--poll-ms", dest="poll_ms", type=int, default=100)
+    p.add_argument("--wait-process-ms", dest="wait_process_ms", type=int, default=0,
+                   help="after the window closes, wait this long for its process to exit")
     p.add_argument("--force", action="store_true",
                    help="TerminateProcess the owning pid if WM_CLOSE doesn't work")
     a = p.parse_args()
@@ -85,29 +96,56 @@ def main():
 
     deadline = time.time() + a.grace_ms / 1000.0
     interval = max(a.poll_ms, 0) / 1000.0
+    window_closed = False
     while time.time() < deadline:
-        if not user32.IsWindow(a.hwnd) and not process_alive(pid):
-            print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE")
-            return
-        # Window may persist briefly even after the process dies (zombie HWND
-        # handles), or the process may outlive the window (multi-window apps).
-        # Treat "window gone OR process gone" depending on which matters more.
-        # For our purposes the window vanishing is the success signal.
         if not user32.IsWindow(a.hwnd):
-            print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE (process still alive)")
+            window_closed = True
+            break
+        if not process_alive(pid):
+            print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE")
             return
         time.sleep(interval)
 
-    # Grace period expired.
+    if not window_closed:
+        if not a.force:
+            print(f"window {a.hwnd} (pid {pid}) still alive after {a.grace_ms}ms "
+                  f"and --force not set", file=sys.stderr); sys.exit(2)
+
+        try:
+            force_kill(pid)
+        except OSError as e:
+            print(f"ERROR: force kill failed: {e}", file=sys.stderr); sys.exit(3)
+        print(f"force-killed hwnd={a.hwnd} pid={pid} after WM_CLOSE timeout")
+        return
+
+    if a.wait_process_ms <= 0:
+        suffix = "" if not process_alive(pid) else " (process still alive)"
+        print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE{suffix}")
+        return
+
+    process_deadline = time.time() + a.wait_process_ms / 1000.0
+    while time.time() < process_deadline:
+        if not process_alive(pid):
+            print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE; process exited")
+            return
+        time.sleep(interval)
+
     if not a.force:
-        print(f"window {a.hwnd} (pid {pid}) still alive after {a.grace_ms}ms "
-              f"and --force not set", file=sys.stderr); sys.exit(2)
+        print(f"window {a.hwnd} closed but pid {pid} still alive after "
+              f"{a.wait_process_ms}ms and --force not set", file=sys.stderr); sys.exit(2)
+
+    if not process_alive(pid):
+        print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE; process exited")
+        return
 
     try:
         force_kill(pid)
     except OSError as e:
+        if not process_alive(pid):
+            print(f"closed hwnd={a.hwnd} pid={pid} via WM_CLOSE; process exited")
+            return
         print(f"ERROR: force kill failed: {e}", file=sys.stderr); sys.exit(3)
-    print(f"force-killed hwnd={a.hwnd} pid={pid} after WM_CLOSE timeout")
+    print(f"closed hwnd={a.hwnd}; force-killed pid={pid} after process-exit timeout")
 
 
 if __name__ == "__main__":

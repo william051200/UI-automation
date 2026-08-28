@@ -39,6 +39,8 @@ def main():
     p.add_argument("--auto-id", dest="auto_id", default=None)
     p.add_argument("--control-type", dest="control_type", default=None)
     p.add_argument("--class", dest="cls", default=None)
+    p.add_argument("--ancestor-name", dest="ancestor_name", default=None,
+                   help="keep only controls with an ancestor whose name matches using --match")
     p.add_argument("--match", choices=["exact", "contains", "regex"], default="exact")
     p.add_argument("--backend", choices=["uia", "win32"], default="uia")
     p.add_argument("--parent-hwnd", dest="parent_hwnd", type=lambda s: int(s, 0), default=None,
@@ -53,6 +55,8 @@ def main():
     p.add_argument("--visible", action="store_true",
                    help="skip zero-area controls (offscreen/collapsed items with an empty "
                         "rectangle), keeping only controls that are actually rendered/clickable.")
+    p.add_argument("--scroll-into-view", dest="scroll_into_view", action="store_true",
+                   help="ask the matching UIA item to scroll into view before reading its rectangle")
     p.add_argument("--timeout-ms", dest="timeout_ms", type=int, default=0,
                    help="if > 0, re-scan until a match is found or this many milliseconds elapse "
                         "(handles controls that render slightly after a click/type). Default 0 = "
@@ -96,8 +100,21 @@ def main():
                         and matches(ctype, a.control_type, a.match)
                         and matches(cls, a.cls, a.match)):
                     continue
+                if a.ancestor_name is not None:
+                    ancestor = c.parent()
+                    ancestor_found = False
+                    while ancestor is not None:
+                        if matches(ancestor.element_info.name or "", a.ancestor_name, a.match):
+                            ancestor_found = True
+                            break
+                        ancestor = ancestor.parent()
+                    if not ancestor_found:
+                        continue
                 if a.name_exclude and a.name_exclude.lower() in (name or "").lower():
                     continue
+                if a.scroll_into_view:
+                    c.iface_scroll_item.ScrollIntoView()
+                    time.sleep(0.1)
                 r = c.rectangle()
                 if a.visible and (r.right <= r.left or r.bottom <= r.top):
                     continue

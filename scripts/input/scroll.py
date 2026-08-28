@@ -1,6 +1,8 @@
 """Scroll the mouse wheel at (x, y). Positive delta = up/right, negative = down/left."""
 import argparse, sys
 import pyautogui
+pyautogui.FAILSAFE = False  # this RDP session can report cursor position as
+# (0, 0) even when not actually stuck at a corner.
 
 MOUSEEVENTF_HWHEEL = 0x01000
 WHEEL_DELTA = 120

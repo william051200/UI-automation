@@ -64,6 +64,9 @@ jobs:
   test:
     runs-on: [self-hosted, "${{ inputs.target_devbox }}"]
     timeout-minutes: 30
+    env:
+      # Persist uv venv outside the checkout so `git clean -ffdx` can't wipe it.
+      UV_PROJECT_ENVIRONMENT: C:\uv-venvs\ui-automation
     steps:
       - name: Checkout
         uses: actions/checkout@v4

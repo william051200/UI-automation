@@ -47,21 +47,37 @@ def walk(elem):
         return
 
 
-def find_descendant(root, name, auto_id, control_type, cls, match_mode):
+def find_descendant(root, name, auto_id, control_type, cls, match_mode, nth=1):
+    """Return the nth (1-based) matching descendant, sorted top-to-bottom /
+    left-to-right for stable ordering. Disambiguates cases where several
+    controls share the same auto_id/name (e.g. the code editor and the
+    Output pane both expose a "Text Editor" / WpfTextView Edit control)."""
+    found = []
     for el in walk(root):
         try:
+            info = el.element_info
             n = el.window_text() or ""
-            aid = el.automation_id or ""
-            ct = el.element_info.control_type or ""
-            c = el.class_name() or ""
+            aid = info.automation_id or ""
+            ct = info.control_type or ""
+            c = info.class_name or ""
         except Exception:
             continue
         if (matches(n, name, match_mode)
                 and matches(aid, auto_id, match_mode)
                 and matches(ct, control_type, match_mode)
                 and matches(c, cls, match_mode)):
-            return el
-    return None
+            try:
+                r = el.rectangle()
+                key = (r.top, r.left)
+            except Exception:
+                key = (0, 0)
+            found.append((key, el))
+    if not found:
+        return None
+    found.sort(key=lambda f: f[0])
+    if nth > len(found):
+        return None
+    return found[nth - 1][1]
 
 
 def read_value(elem, joiner):
@@ -110,6 +126,11 @@ def main():
                         "number) from a longer label for clean capture.")
     p.add_argument("--joiner", default="\n",
                    help="string used to join multi-segment texts() fallback (default newline)")
+    p.add_argument("--nth", type=int, default=1,
+                   help="1-based index into matches sorted top-to-bottom/left-to-right "
+                        "(default 1). Use to disambiguate controls that share the same "
+                        "name/auto_id, e.g. the code editor vs. the Output pane, which "
+                        "both expose a 'Text Editor' / WpfTextView Edit control.")
     a = p.parse_args()
 
     try:
@@ -124,7 +145,7 @@ def main():
 
     has_selector = any(s is not None for s in (a.name, a.auto_id, a.control_type, a.cls))
     if has_selector:
-        target = find_descendant(root, a.name, a.auto_id, a.control_type, a.cls, a.match)
+        target = find_descendant(root, a.name, a.auto_id, a.control_type, a.cls, a.match, a.nth)
         if target is None:
             print("no match", file=sys.stderr); sys.exit(1)
     else:

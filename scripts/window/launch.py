@@ -2,7 +2,13 @@
 
 Prints `pid` on success when `--wait-window` is not used. With `--wait-window`,
 prints `pid<TAB>hwnd<TAB>left<TAB>top<TAB>right<TAB>bottom<TAB>title` once a
-matching window is found (same column order as find_window.py). Exit codes:
+matching window is found (same column order as find_window.py). The match must
+hold the same hwnd across `--stable-checks` consecutive polls (default 2)
+before being returned -- some apps (e.g. Visual Studio) briefly show a
+splash/loading window with a title matching the final main window's regex,
+then swap it out for the real main-frame window under a different hwnd; a
+caller that captured the splash's handle would later fail with an "invalid
+handle" error the moment it tried to use it. Exit codes:
   0 OK   1 launch failed   2 window-wait timed out   3 bad usage
 """
 import argparse, os, re, subprocess, sys, time
@@ -58,6 +64,12 @@ def main():
                    help="regex on window title; if set, poll until matched or timeout")
     p.add_argument("--wait-timeout-ms", dest="wait_timeout_ms", type=int, default=10000)
     p.add_argument("--poll-ms", dest="poll_ms", type=int, default=250)
+    p.add_argument("--stable-checks", dest="stable_checks", type=int, default=2,
+                   help="require the SAME hwnd to match on this many consecutive polls before "
+                        "returning it (default 2). Guards against apps (e.g. Visual Studio) that "
+                        "briefly show a splash/loading window with a matching title before "
+                        "swapping in the real main-frame window under a different hwnd; without "
+                        "this, callers could capture a handle that is destroyed moments later.")
     p.add_argument("--backend", choices=["uia", "win32", "any"], default="any")
     a = p.parse_args()
 
@@ -81,13 +93,25 @@ def main():
     title_rx = re.compile(a.wait_window)
     deadline = time.time() + a.wait_timeout_ms / 1000.0
     interval = max(a.poll_ms, 0) / 1000.0
+    stable_needed = max(a.stable_checks, 1)
+    last_handle = None
+    stable_count = 0
     attempts = 0
     while True:
         attempts += 1
         hit = find_matching_window(title_rx, a.backend, prefer_pid=pid)
         if hit:
-            print("\t".join(str(x) for x in hit))
-            return
+            if hit[1] == last_handle:
+                stable_count += 1
+            else:
+                last_handle = hit[1]
+                stable_count = 1
+            if stable_count >= stable_needed:
+                print("\t".join(str(x) for x in hit))
+                return
+        else:
+            last_handle = None
+            stable_count = 0
         if time.time() >= deadline:
             print(f"timeout: window matching {a.wait_window!r} not found after "
                   f"{a.wait_timeout_ms}ms ({attempts} attempts); launcher pid={pid}",

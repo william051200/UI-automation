@@ -57,10 +57,10 @@ The agent writes `test_cases/notepad_save.csv`, runs it, and reports the result.
 ## More example prompts
 
 **Run an existing scenario** (no authoring):
-> Run `.\run.ps1 test_cases\powershell_echo_loop.csv -q` and report only the exit code and any FAIL lines.
+> Run `.\run.ps1 test_cases\<test-case>.csv -q` and report only the exit code and any FAIL lines.
 
 **Variant of an existing scenario:**
-> Use `test_cases/powershell_echo_loop.csv` as a template to create `test_cases/cmd_echo.csv` that opens Command Prompt instead of PowerShell and echoes the four strings, then validate it.
+> Use `test_cases\_template.csv` to create `test_cases\<test-case>.csv` for the requested scenario, then validate it.
 
 **Repeat-until (unknown count):**
 > In `test_cases/<name>.csv`, keep clicking the next "Vulnerable" row until none remain, using a `# LOOP` block. Loops are unrolled otherwise.

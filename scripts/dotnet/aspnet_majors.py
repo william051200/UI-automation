@@ -15,6 +15,13 @@ machine actually has (8, 9, 10, 11, ...) instead of hard-coding them:
       list is exhausted -- so a ``# LOOP`` while-condition stops cleanly.
 
 The majors are de-duplicated and sorted ascending for reproducibility.
+
+NOTE: the CSV `# LOOP` row that drives ``next`` sets ``max_iter=15`` as a
+safety cap on iteration count -- comfortably above the 8/9/10 majors in use
+today. If a machine is ever set up with more than 15 installed
+Microsoft.AspNetCore.App majors at once, raise that CSV's ``max_iter`` value
+accordingly (this script itself has no built-in limit on how many majors it
+will collect/yield).
 """
 import argparse
 import json

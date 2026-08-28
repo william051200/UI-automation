@@ -4,12 +4,15 @@ Modes:
   read              prints current clipboard text to stdout (no trailing
                     newline added), empty string if clipboard has no text
   write <text>      replaces clipboard contents with <text>
+  write --b64 <b64> replaces clipboard contents with base64-decoded <b64>
+                    text (UTF-8); use this to avoid literal '{'/'}' in
+                    <text> being mistaken for CSV/run_test.py placeholders
   write-stdin       reads stdin verbatim and writes it to the clipboard
                     (use for multi-line / binary-safe text)
 
 Uses the Win32 clipboard API via ctypes — no extra dependency required.
 """
-import argparse, ctypes, sys
+import argparse, base64, ctypes, sys
 from ctypes import wintypes
 
 try:
@@ -96,6 +99,8 @@ def main():
     sub.add_parser("read")
     w = sub.add_parser("write")
     w.add_argument("text")
+    w.add_argument("--b64", action="store_true",
+                    help="treat <text> as base64-encoded UTF-8 and decode before writing")
     sub.add_parser("write-stdin")
     a = p.parse_args()
 
@@ -103,8 +108,9 @@ def main():
         sys.stdout.write(read_clipboard())
         sys.stdout.flush()
     elif a.mode == "write":
-        write_clipboard(a.text)
-        print(f"wrote {len(a.text)} chars")
+        text = base64.b64decode(a.text).decode("utf-8") if a.b64 else a.text
+        write_clipboard(text)
+        print(f"wrote {len(text)} chars")
     elif a.mode == "write-stdin":
         text = sys.stdin.read()
         write_clipboard(text)

@@ -4,7 +4,7 @@ Test cases are plain-text **CSV** — the version-control-friendly, **hand-autho
 
 ```powershell
 # Run a CSV test case directly
-.\run.ps1 test_cases\powershell_echo_loop.csv -q
+.\run.ps1 test_cases\<test-case>.csv -q
 ```
 
 The layout favors **readability**: steps are grouped into numbered phases — plain-English descriptions on the left, run values in the middle, an `Expected` note on the right. Loops are **unrolled** (one row set per iteration); there is no `foreach`.
@@ -21,8 +21,8 @@ One `.csv` per test, with two marker-delimited sections. A marker is a row whose
 ```
 # CONFIG
 Section,Key,Value
-name,,powershell_echo_loop
-description,,"Open Windows PowerShell ..."
+name,,sample_test
+description,,"Describe the UI-automation scenario."
 
 # STEPS
 No,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,Expected
@@ -42,7 +42,7 @@ Three columns: `Section | Key | Value`. Only what the runner needs:
 
 No `inputs`, `timing`, or `expected_results` block — those values live on the step rows; the runner tolerates their absence.
 
-**Screenshot folder naming:** by default the runner writes screenshots to `screenshots/{name}-{timestamp}` (e.g. `screenshots/powershell_echo_loop-20260812_014452Z`), where `{name}` is the CONFIG `name` value and `{timestamp}` is the UTC run start time — this makes it obvious which test case a folder belongs to. To use a custom folder for a specific test case, add `artifacts,screenshot_dir,<your/custom/path>` to `# CONFIG` (placeholders like `{name}`/`{timestamp}` still work there).
+**Screenshot folder naming:** by default the runner writes screenshots to `screenshots/{name}-{timestamp}` (e.g. `screenshots/sample_test-20260812_014452Z`), where `{name}` is the CONFIG `name` value and `{timestamp}` is the UTC run start time — this makes it obvious which test case a folder belongs to. To use a custom folder for a specific test case, add `artifacts,screenshot_dir,<your/custom/path>` to `# CONFIG` (placeholders like `{name}`/`{timestamp}` still work there).
 
 ### `# STEPS` section
 

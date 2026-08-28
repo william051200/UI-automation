@@ -1,0 +1,16 @@
+# CONFIG
+Section,Key,Value
+name,,nested_loop_example
+description,,"Minimal fixture exercising a # LOOP nested inside another # LOOP / # END LOOP while-block."
+
+# STEPS
+No,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected
+1,Setup,Press a key before the outer loop.,scripts/input/key.py,"[""win""]",100,,,,,,,,,
+# LOOP,Outer,While an outer item exists capture its coords.,scripts/uia/find_control.py,"[""{vars.hwnd}"", ""--name"", ""Outer"", ""--control-type"", ""ListItem""]",,"{""vars.outer_x"": ""$.rows[1].cols[7]""}",0,,,,,,3,Loop while an outer item exists.
+2,,Click the outer row.,scripts/input/click.py,"[""{vars.outer_x}"", ""0""]",200,,,,,,,,,
+# LOOP,Inner,While an inner item exists capture its coords.,scripts/uia/find_control.py,"[""{vars.hwnd}"", ""--name"", ""Inner"", ""--control-type"", ""ListItem""]",,"{""vars.inner_x"": ""$.rows[1].cols[7]""}",0,,,,,,3,Loop while an inner item exists.
+3,,Click the inner row.,scripts/input/click.py,"[""{vars.inner_x}"", ""0""]",200,,,,,,,,,
+# END LOOP,,,,,,,,,,,,,,
+2,,Press enter after the inner loop finishes.,scripts/input/key.py,"[""enter""]",200,,,,,,,,,
+# END LOOP,,,,,,,,,,,,,,
+3,Done,Press a key after the outer loop.,scripts/input/key.py,"[""esc""]",100,,,,,,,,,

@@ -16,7 +16,7 @@ This file follows the [agents.md](https://agents.md/) convention and is loaded a
 - `docs/file-structure.md` — what every file/folder is for.
 - `docs/reproducibility.md` — why runs must be bit-identical.
 - `docs/troubleshooting.md` — DPI, multi-monitor, UI language gotchas.
-- `test_cases/powershell_echo_loop.csv` — canonical example.
+- `test_cases/_template.csv` — canonical test-case layout.
 - `scripts/*.py` — one script per step `type`.
 
 ## Hard rules when authoring or editing a test case
@@ -31,7 +31,7 @@ This file follows the [agents.md](https://agents.md/) convention and is loaded a
 8. For file assertions use `assert_file` (supports `--negate`, `--contains`, `--delete`).
 9. Do **not** invent new step types. If something doesn't fit, ask before extending the schema.
 10. When emitting a new test case, output ONE complete CSV in a single fenced block; no surrounding prose unless the user asks for an explanation.
-11. **Minimize waits.** Keep test runs fast: prefer polling assertions (`expected_contains` with `poll_total_ms`/`poll_interval_ms`, or `wait_for`) over long fixed `wait_ms` whenever there's an observable state to wait on. When a fixed `wait_ms` is unavoidable, use the smallest value that reliably works plus a small safety margin — don't pad delays "to be safe". This is guidance only: don't randomize values and keep them identical every run.
+11. **Minimize waits.** When a step has an observable completion state, use a polling assertion (`expected_contains` with `poll_total_ms`/`poll_interval_ms`, or `wait_for`), especially for asynchronous operations such as app/window launch, build/compile, project scaffolding, or other heavy IDE work. To tolerate slower machines, raise `poll_total_ms` rather than adding `wait_ms`; polling exits early when the condition is met, while a fixed wait always consumes its full duration. Keep `poll_interval_ms` responsive (typically 200-500ms). Use fixed `wait_ms` only when no completion state can be observed, setting it from the observed worst-case duration plus a modest safety margin. Adjust only steps with evidence of timing risk—never blanket-pad waits, randomize values, or vary them between runs.
 12. **Keep paths machine-portable.** Never hardcode a user/profile path (e.g. `C:\Users\<you>`) — resolve the home dir via `scripts/files/print_home.py`, capture `{vars.home}`, and build absolute paths from it. Locate Visual Studio via `scripts/window/find_devenv.py` → `{vars.devenv}` rather than a literal install path. Use `{timestamp}` for artifact dirs, match window titles by regex (not user-specific text), and discover machine-varying values (SDK/runtime versions, drive letters) at runtime instead of baking them in, so a case authored on one PC/user runs unchanged on another.
 
 ## Iterating on failures

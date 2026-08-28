@@ -131,7 +131,10 @@ def _build_steps(steps_rows, screenshot_dir):
 
     `# LOOP` / `# END LOOP` marker rows (in the `No` column) delimit a
     conditional while-loop: the `# LOOP` row carries the loop condition and the
-    rows up to `# END LOOP` form the loop body (a nested step list).
+    rows up to the *matching* `# END LOOP` form the loop body (a nested step
+    list). `# LOOP` blocks may themselves be nested (e.g. a version-discovery
+    loop wrapping a scenario that already contains its own inner loops) --
+    nesting depth is tracked so the correct `# END LOOP` is matched.
 
     The readable `No` / `Main step` / `Expected` columns are authoring
     annotations and are ignored here. Step ids are auto-generated.
@@ -146,33 +149,43 @@ def _build_steps(steps_rows, screenshot_dir):
     def marker(raw):
         return raw[0].strip().upper() if raw and raw[0] else ""
 
-    steps = []
-    n = 0
     body_rows = steps_rows[1:]
-    idx = 0
-    while idx < len(body_rows):
-        raw = body_rows[idx]
-        if marker(raw) == S.LOOP_START_MARKER:
-            n += 1
-            loop_id = f"step_{n}"
-            cond_cells = cells_for(raw)
-            inner = []
+    counter = [0]  # mutable step-id counter shared across recursive calls
+
+    def parse(start, end):
+        """Parse body_rows[start:end], returning (steps, ). Handles nesting."""
+        steps = []
+        idx = start
+        while idx < end:
+            raw = body_rows[idx]
+            if marker(raw) == S.LOOP_START_MARKER:
+                counter[0] += 1
+                loop_id = f"step_{counter[0]}"
+                cond_cells = cells_for(raw)
+                # Find the matching `# END LOOP`, accounting for nested loops.
+                depth = 1
+                scan = idx + 1
+                while scan < end and depth > 0:
+                    mk = marker(body_rows[scan])
+                    if mk == S.LOOP_START_MARKER:
+                        depth += 1
+                    elif mk == S.LOOP_END_MARKER:
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    scan += 1
+                inner = parse(idx + 1, scan)
+                steps.append(_build_while(cond_cells, loop_id, inner))
+                idx = scan + 1  # skip past the matching `# END LOOP` row
+                continue
+            cells = cells_for(raw)
+            if not S.blank(cells.get("script")):
+                counter[0] += 1
+                steps.append(_row_to_step(cells, f"step_{counter[0]}", screenshot_dir))
             idx += 1
-            while idx < len(body_rows) and marker(body_rows[idx]) != S.LOOP_END_MARKER:
-                inner_cells = cells_for(body_rows[idx])
-                if not S.blank(inner_cells.get("script")):
-                    n += 1
-                    inner.append(_row_to_step(inner_cells, f"step_{n}", screenshot_dir))
-                idx += 1
-            steps.append(_build_while(cond_cells, loop_id, inner))
-            idx += 1  # skip the # END LOOP row
-            continue
-        cells = cells_for(raw)
-        if not S.blank(cells.get("script")):
-            n += 1
-            steps.append(_row_to_step(cells, f"step_{n}", screenshot_dir))
-        idx += 1
-    return steps
+        return steps
+
+    return parse(0, len(body_rows))
 
 
 def _coerce(value):

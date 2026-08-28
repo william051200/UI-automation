@@ -35,6 +35,10 @@ def main():
     p.add_argument("--name", default=None)
     p.add_argument("--item", required=True, help="item text to select")
     p.add_argument("--match", choices=["exact", "contains", "regex"], default="exact")
+    p.add_argument("--timeout-ms", dest="timeout_ms", type=int, default=1000,
+                    help="total time budget to keep retrying while items are still populating")
+    p.add_argument("--poll-ms", dest="poll_ms", type=int, default=250,
+                    help="pause between expand/read attempts")
     a = p.parse_args()
 
     app = Application(backend="uia").connect(handle=a.hwnd)
@@ -54,25 +58,31 @@ def main():
         sys.exit(1)
 
     # WPF combos are virtualized: items only materialize while the dropdown is open.
-    # Expand once (short settle), read the ListItem elements, select the match, then
-    # collapse so the UI is not left open. One quick retry if the first read is empty.
+    # Expand, read the ListItem elements, select the match, then collapse so the UI
+    # is not left open. Keep retrying (expand can be slow while the host page is
+    # still populating, e.g. the New Project wizard enumerating templates) until
+    # --timeout-ms elapses.
     import time
 
     def read_item_elems():
         try:
-            return list(combo.descendants(control_type="ListItem"))
+            items = list(combo.descendants(control_type="ListItem"))
+            if items:
+                return items
+            return list(win.descendants(control_type="ListItem"))
         except Exception:
             return []
 
     elems = []
-    for attempt in range(2):
+    deadline = time.monotonic() + (a.timeout_ms / 1000.0)
+    while True:
         try:
             combo.expand()
         except Exception:
             pass
-        time.sleep(0.25)
+        time.sleep(a.poll_ms / 1000.0)
         elems = [e for e in read_item_elems() if (e.element_info.name or "")]
-        if elems:
+        if elems or time.monotonic() >= deadline:
             break
 
     target_elem = next(

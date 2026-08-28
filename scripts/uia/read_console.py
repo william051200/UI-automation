@@ -22,19 +22,50 @@ def main():
     # Prefer the Document control (PowerShell console exposes its buffer there)
     for c in texts:
         try:
-            if c.element_info.control_type == "Document":
-                v = c.iface_value.CurrentValue if hasattr(c, "iface_value") else None
+            if c.element_info.control_type != "Document":
+                continue
+            try:
+                v = c.iface_value.CurrentValue
                 if v:
                     print(v)
                     return
-                # fallback: legacy patterns
-                try:
-                    print(c.legacy_properties().get("Value", ""))
+            except Exception:
+                pass
+            # fallback: legacy patterns
+            try:
+                v = c.legacy_properties().get("Value", "")
+                if v:
+                    print(v)
                     return
-                except Exception:
-                    pass
+            except Exception:
+                pass
+            # fallback: UIA TextPattern (some conhost/cmd.exe consoles expose
+            # their buffer only via TextPattern, not Value/LegacyIAccessible)
+            try:
+                doc_range = c.iface_text.DocumentRange
+                v = doc_range.GetText(-1)
+                if v and v.strip():
+                    print(v)
+                    return
+            except Exception:
+                pass
         except Exception:
             continue
+    # Some consoles (e.g. Windows Terminal-hosted, as used by VS 18's
+    # "Start Without Debugging") expose the buffer as a plain Text control
+    # instead of Document. Prefer the longest Text control's window_text.
+    best = ""
+    for c in texts:
+        try:
+            if c.element_info.control_type == "Text":
+                t = c.window_text()
+                if t and len(t) > len(best):
+                    best = t
+        except Exception:
+            continue
+    if len(best) > 50:
+        print(best)
+        return
     # Last resort: dump every visible text
     out = []
     for c in texts:

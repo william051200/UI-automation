@@ -12,28 +12,30 @@ irm https://raw.githubusercontent.com/william051200/UI-automation/main/install.p
 
 This installs `uv` + Python + `git` as needed, clones the repo to `%USERPROFILE%\UI-automation`, and installs all pinned dependencies.
 
-## Run the example
+## Run a test case
 
 ```powershell
 cd $HOME\UI-automation
-.\run.ps1 test_cases\powershell_echo_loop.csv
+.\run.ps1 test_cases\<test-case>.csv
 ```
 
-(equivalent to `uv run python run_test.py test_cases\powershell_echo_loop.csv`.)
+(equivalent to `uv run python run_test.py test_cases\<test-case>.csv`.)
 
 Scenarios are authored as readable CSV files — `run.ps1` loads the `.csv` directly:
 
 ```powershell
-.\run.ps1 test_cases\powershell_echo_loop.csv -q
+.\run.ps1 test_cases\<test-case>.csv -q
 ```
 
 See [CSV test-case format](docs/csv-test-format.md) for the file layout, the in-memory loader, and the `csv-test-formatter` skill.
 
-The example opens PowerShell via Start menu, echoes 4 fixed strings, validates each via UIA, saves a screenshot per iteration, then closes the window with a mouse-click on the UIA-located Close button.
+Replace `<test-case>` with a filename from the [test-case directory](docs/test-cases.md).
 
 Exit codes: `0` pass, `1` assertion failed, `2` runner error.
 
 Add `-q` (or `--quiet`) to suppress per-step echo and successful subcommand stdout; failures, stderr, and the final RESULT line are always shown.
+
+**On any step failure**, before reporting `RESULT: FAIL`, the runner automatically: screenshots the current UI state, screenshots the console/log window if the CSV captured one (a `capture` var whose name contains `cmd`/`console`, e.g. `vars.cmd_hwnd`), and force-closes every window handle the CSV captured (via `close_window.py --force`) so a failed run doesn't leave apps/consoles orphaned for the next run. Each of these is best-effort and never masks the original failure.
 
 ## Author a new scenario
 

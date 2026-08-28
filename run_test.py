@@ -8,7 +8,8 @@ Exit codes:
     1  one or more assertions failed
     2  runner error (bad spec, script missing, etc.)
 """
-import argparse, datetime, os, re, subprocess, sys, time
+import argparse, ctypes, datetime, os, re, subprocess, sys, time
+from ctypes import wintypes
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "scripts", "csvfmt"))
@@ -280,6 +281,82 @@ def exec_step(step, ctx, local_subs):
         time.sleep(wait)
 
 
+def _hwnd_vars(ctx):
+    """Captured window handles, keyed by var name, in capture order.
+
+    Any `capture` mapping whose destination var name ends in `hwnd` (the
+    convention used throughout test_cases/, e.g. vars.vs_hwnd, vars.cmd_hwnd)
+    is treated as a window handle worth acting on during failure cleanup.
+    """
+    out = []
+    for key, val in ctx.vars.items():
+        if key.lower().endswith("hwnd"):
+            try:
+                out.append((key, int(val)))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _console_hwnd(ctx):
+    """Best-effort guess at a captured command-prompt / console window var."""
+    for key, hwnd in _hwnd_vars(ctx):
+        lk = key.lower()
+        if "console" in lk or "cmd" in lk:
+            return hwnd
+    return None
+
+
+def _window_rect(hwnd):
+    """Return (x, y, w, h) for hwnd via GetWindowRect, or None on failure."""
+    rect = wintypes.RECT()
+    if not ctypes.windll.user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(rect)):
+        return None
+    return (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
+
+
+def on_failure_capture(ctx):
+    """Best-effort diagnostics + cleanup run once a step fails.
+
+    1. Screenshot the current UI state (full screen).
+    2. Screenshot the console/log window, if one was captured (any `*hwnd`
+       var whose name contains "cmd" or "console" -- the convention already
+       used by test_cases/*.csv).
+    3. Force-close every captured window (and its owning process), so a
+       failed run doesn't leave the app/console orphaned for the next run.
+
+    Never lets a diagnostics/cleanup error mask the original assertion
+    failure -- each sub-step is independently best-effort.
+    """
+    print("\n--- on-failure cleanup ---")
+
+    ui_shot = os.path.join(ctx.shot_dir, f"ss_{ctx.ss_counter}_FAILURE_ui_state.png")
+    try:
+        run_cmd("scripts/files/screenshot.py", [ui_shot])
+        ctx.ss_counter += 1
+    except Exception as e:
+        print(f"    ! failed to capture UI-state screenshot: {e}")
+
+    console_hwnd = _console_hwnd(ctx)
+    if console_hwnd is not None:
+        log_shot = os.path.join(ctx.shot_dir, f"ss_{ctx.ss_counter}_FAILURE_console_log.png")
+        rect = _window_rect(console_hwnd)
+        args = [log_shot] + (["--region", *map(str, rect)] if rect else [])
+        try:
+            run_cmd("scripts/files/screenshot.py", args)
+            ctx.ss_counter += 1
+        except Exception as e:
+            print(f"    ! failed to capture console/log screenshot: {e}")
+    else:
+        print("    (no captured *cmd_hwnd/*console_hwnd var found; skipping log screenshot)")
+
+    for key, hwnd in _hwnd_vars(ctx):
+        try:
+            run_cmd("scripts/window/close_window.py", [hwnd, "--force"])
+        except Exception as e:
+            print(f"    ! failed to close {key}={hwnd}: {e}")
+
+
 def main():
     global QUIET
     ap = argparse.ArgumentParser(description=__doc__)
@@ -298,6 +375,10 @@ def main():
             exec_step(step, ctx, {})
         except AssertionError as e:
             print(f"\n*** STEP FAILED: {step.get('id')}: {e}")
+            try:
+                on_failure_capture(ctx)
+            except Exception as cleanup_err:
+                print(f"    ! on-failure cleanup raised unexpectedly: {cleanup_err}")
             failed = True
             break
     print("\n=== RESULT:", "FAIL" if failed else "PASS", "===")

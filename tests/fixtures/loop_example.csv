@@ -2,7 +2,6 @@
 Section,Key,Value
 name,,loop_example
 description,,"Minimal fixture exercising a # LOOP / # END LOOP while-block."
-artifacts,screenshot_dir,screenshots/{timestamp}
 
 # STEPS
 No,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected

@@ -1,6 +1,9 @@
 """Press a single key or hotkey combo (e.g. enter, win, ctrl+s)."""
 import argparse, sys
 import pyautogui
+pyautogui.FAILSAFE = False  # this RDP session can report cursor position as
+# (0, 0) even when not actually stuck at a corner; pyautogui's fail-safe check
+# runs before keyboard actions too, so it must be disabled here as well.
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)

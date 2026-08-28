@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts", "csvfmt"))
 
 import csv_loader  # noqa: E402
 
-CSV = os.path.join(REPO_ROOT, "test_cases", "powershell_echo_loop.csv")
+CSV = os.path.join(REPO_ROOT, "test_cases", "v0", "powershell_echo_loop.csv")
 
 
 class CsvLoaderTests(unittest.TestCase):
@@ -112,6 +112,44 @@ class CsvLoaderLoopTests(unittest.TestCase):
         for s in self.spec["steps"]:
             ids.append(s["id"])
             ids.extend(b["id"] for b in s.get("body", []))
+        self.assertEqual(len(ids), len(set(ids)))
+
+
+class CsvLoaderNestedLoopTests(unittest.TestCase):
+    NESTED_LOOP_CSV = os.path.join(REPO_ROOT, "tests", "fixtures", "nested_loop_example.csv")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spec = csv_loader.load(cls.NESTED_LOOP_CSV)
+
+    def test_outer_while_step_is_built(self):
+        types = [s["type"] for s in self.spec["steps"]]
+        self.assertEqual(types, ["key", "while", "key"])
+
+    def test_outer_body_contains_click_and_nested_while(self):
+        outer = next(s for s in self.spec["steps"] if s["type"] == "while")
+        body_types = [s["type"] for s in outer["body"]]
+        self.assertEqual(body_types, ["click", "while", "key"])
+
+    def test_inner_while_condition_and_body(self):
+        outer = next(s for s in self.spec["steps"] if s["type"] == "while")
+        inner = next(s for s in outer["body"] if s["type"] == "while")
+        self.assertEqual(inner["condition"]["script"], "scripts/uia/find_control.py")
+        self.assertIn("vars.inner_x", inner["condition"]["capture"])
+        self.assertEqual(inner["max_iterations"], 3)
+        self.assertEqual(len(inner["body"]), 1)
+        self.assertEqual(inner["body"][0]["type"], "click")
+
+    def test_all_ids_unique_across_nesting(self):
+        ids = []
+
+        def collect(step):
+            ids.append(step["id"])
+            for b in step.get("body", []):
+                collect(b)
+
+        for s in self.spec["steps"]:
+            collect(s)
         self.assertEqual(len(ids), len(set(ids)))
 
 

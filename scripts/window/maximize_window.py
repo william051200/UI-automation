@@ -20,11 +20,29 @@ def main():
                    help="sleep after maximizing so the window can finish animating (default 100)")
     a = p.parse_args()
 
+    # Connecting via UIA immediately after a window is created can transiently
+    # raise "Invalid handle ... passed to connect()" if the window's UI Automation
+    # provider hasn't finished initializing yet (observed live right after devenv
+    # first opens). Retry a few times with a short backoff before giving up.
+    win = None
+    last_error = None
+    for _attempt in range(5):
+        try:
+            app = Application(backend=a.backend).connect(handle=a.hwnd)
+            candidate = app.window(handle=a.hwnd)
+            if candidate.exists(timeout=0.5):
+                win = candidate
+                break
+        except ElementNotFoundError as e:
+            last_error = e
+        except Exception as e:
+            last_error = e
+        time.sleep(0.5)
+
+    if win is None:
+        print(f"ERROR: hwnd {a.hwnd} not found: {last_error}", file=sys.stderr); sys.exit(1)
+
     try:
-        app = Application(backend=a.backend).connect(handle=a.hwnd)
-        win = app.window(handle=a.hwnd)
-        if not win.exists(timeout=0.5):
-            print(f"ERROR: hwnd {a.hwnd} not found", file=sys.stderr); sys.exit(1)
         if win.is_minimized():
             win.restore()
         if win.is_maximized():
@@ -32,8 +50,6 @@ def main():
             print(f"already maximized hwnd={a.hwnd} title={title!r}")
             return
         win.maximize()
-    except ElementNotFoundError:
-        print(f"ERROR: hwnd {a.hwnd} not found", file=sys.stderr); sys.exit(1)
     except Exception as e:
         print(f"ERROR: could not maximize hwnd {a.hwnd}: {e}", file=sys.stderr); sys.exit(1)
 

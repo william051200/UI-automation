@@ -4,10 +4,11 @@ Primary detection uses ``vswhere`` (shipped with every VS installer at a fixed,
 documented path). Insiders/Preview channels are not always reported by vswhere,
 so several fallbacks run in order until a real ``devenv.exe`` is found:
   1. explicit override (``--path`` arg or ``VSDEVENV`` env var)
-  2. vswhere ``-latest``
-  3. vswhere ``-prerelease -latest`` (Preview/Insiders that register normally)
-  4. registry ``HKLM\\...\\VisualStudio\\SxS\\VS7`` install paths
-  5. filesystem scan of ``Microsoft Visual Studio\\*\\*\\Common7\\IDE\\devenv.exe``
+  2. when ``--prerelease`` is set, filesystem scan for Insiders/Preview
+  3. vswhere ``-latest``
+  4. vswhere ``-prerelease -latest`` (Preview/Insiders that register normally)
+  5. registry ``HKLM\\...\\VisualStudio\\SxS\\VS7`` install paths
+  6. filesystem scan of ``Microsoft Visual Studio\\*\\*\\Common7\\IDE\\devenv.exe``
      under both Program Files roots (catches Insiders dirs)
 Prints the full path to ``devenv.exe`` as the first stdout column so a test can
 capture it via ``$.cols[0]`` and use ``{vars.devenv}`` as a launch executable.
@@ -89,6 +90,17 @@ def _from_filesystem():
     return sorted(candidates, reverse=True)[0] if candidates else ""
 
 
+def _from_prerelease_filesystem():
+    candidates = []
+    for root in _program_files_roots():
+        for edition in ("Insiders", "Preview"):
+            pat = os.path.join(root, "Microsoft Visual Studio", "*", edition,
+                               "Common7", "IDE", "devenv.exe")
+            candidates.extend(glob.glob(pat))
+    candidates = [c for c in candidates if os.path.isfile(c)]
+    return sorted(candidates, reverse=True)[0] if candidates else ""
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -100,6 +112,7 @@ def main():
 
     sources = [
         lambda: a.path,
+        lambda: _from_prerelease_filesystem() if a.prerelease else "",
         lambda: _from_vswhere(a.prerelease),
         lambda: _from_vswhere(True),
         _from_registry,

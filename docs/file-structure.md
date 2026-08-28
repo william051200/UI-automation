@@ -11,13 +11,14 @@ A guided tour of every file and folder in this repo, so you can find your way ar
 | `LICENSE` | MIT license. |
 | `install.ps1` | One-line bootstrap installer for a fresh Windows machine (see [Entry points](#entry-points)). |
 | `install-copilot.ps1` | Optional installer for the GitHub Copilot CLI — sets up both the standalone `copilot` CLI and the `gh copilot` extension (whichever is missing) and triggers interactive login. |
-| `setup.ps1` | Local convenience wrapper that runs `uv sync` when `uv` is already installed. |
+| `setup.ps1` | Shared dependency installer. Defaults to the verified offline wheelhouse and supports online `uv sync` when requested. |
 | `run.ps1` | Thin shortcut wrapper: `.\run.ps1 <spec> [-q]` → `uv run python run_test.py <spec> [-q]`. Lets you invoke a scenario without going through an LLM. |
 | `run_test.py` | CSV test-spec runner (see [Entry points](#entry-points)). |
 | `pyproject.toml` | Project metadata + direct dependencies (`pyautogui`, `pywinauto`, `Pillow`, `websocket-client`). Pins Python to `>=3.10,<3.13`. |
 | `requirements.txt` | Human-edited top-level requirements list (mirrors `pyproject.toml` deps). |
 | `requirements.lock.txt` | Fully resolved, pinned dependency list for `pip` users. |
 | `uv.lock` | `uv`-generated lockfile pinning every transitive dependency with content hashes. |
+| `ui-auto-wheelhouse.zip` | SHA-256-verified archive of the pinned Windows wheels used by offline setup. |
 | `.python-version` | Interpreter version pin used by `uv` to fetch the exact Python build. |
 | `.gitignore` | Excludes `.venv/`, `screenshots/`, and other local artifacts from git. |
 | `.venv/` | Local virtual environment created by `uv sync` (not committed). |
@@ -35,7 +36,7 @@ Zero-state bootstrap for a clean Windows 10/11 machine. In order it:
 1. Installs `uv` from `astral.sh` if missing.
 2. Installs `git` via `winget` if missing.
 3. Clones (or `git pull`s) the repo into `%USERPROFILE%\UI-automation`.
-4. Runs `uv sync` to fetch the pinned Python interpreter and all dependencies.
+4. Calls `setup.ps1` to create the Python environment and install all pinned dependencies.
 5. Prints the example command to run the bundled scenario.
 
 Designed to be invoked via `irm https://raw.githubusercontent.com/william051200/UI-automation/main/install.ps1 | iex`.
@@ -51,14 +52,14 @@ Optional, standalone installer for the GitHub Copilot CLI — useful for users w
 Pass `-NoLogin` to skip the sign-in prompts. Invoke locally with `.\install-copilot.ps1` or via `irm https://raw.githubusercontent.com/william051200/UI-automation/main/install-copilot.ps1 | iex`.
 
 ### `setup.ps1`
-Lightweight alternative for developers who already have `uv` installed. `cd`s to the repo, verifies `uv` is on `PATH`, runs `uv sync`, and prints the example command. Use `install.ps1` instead on a fresh machine.
+Shared dependency installer for developers and remote-runner onboarding. It verifies that `uv` is on `PATH` and defaults to installing `requirements.lock.txt` from the SHA-256-verified `ui-auto-wheelhouse.zip` without using a package index. Pass `-DependencyMode Online` to use `uv sync`, or `-EnvironmentPath` to target an environment other than the local `.venv`. Use `install.ps1` instead on a fresh machine.
 
 ### `run.ps1`
 Thin PowerShell wrapper around `uv run python run_test.py`. Takes the spec path as its first argument and forwards any remaining flags (e.g. `-q`). `Set-Location $PSScriptRoot` lets you call it from any working directory, and it propagates the runner's exit code unchanged.
 
 ```powershell
-.\run.ps1 test_cases\powershell_echo_loop.csv
-.\run.ps1 test_cases\powershell_echo_loop.csv -q
+.\run.ps1 test_cases\<test-case>.csv
+.\run.ps1 test_cases\<test-case>.csv -q
 ```
 
 ### `run_test.py`
@@ -104,4 +105,4 @@ See [`scripts-reference.md`](scripts-reference.md) for what every script does, i
 
 ## `test_cases/`
 
-Holds the declarative scenarios consumed by `run_test.py`. One file per scenario; new scenarios drop in here alongside the existing examples. See [`test-cases.md`](test-cases.md) for the catalog of available scenarios.
+Holds the declarative scenarios consumed by `run_test.py`. Active scenarios use `<type>-<ID>-<description>.csv`; legacy scenarios are retained under `test_cases/v0/`. See [`test-cases.md`](test-cases.md) for the complete directory.

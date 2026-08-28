@@ -1,6 +1,8 @@
 """Mouse click at (x, y)."""
 import argparse, sys
 import pyautogui
+pyautogui.FAILSAFE = False  # see move_mouse.py comment: this RDP session can
+# report cursor position as (0, 0) even when not actually stuck at a corner.
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)

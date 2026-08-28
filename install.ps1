@@ -77,14 +77,9 @@ if (Test-Path (Join-Path $RepoDir ".git")) {
     Write-Ok "Repo cloned."
 }
 
-# 4. uv sync --------------------------------------------------------------
-Write-Step "Installing Python interpreter + dependencies (uv sync)..."
-Push-Location $RepoDir
-try {
-    uv sync
-} finally {
-    Pop-Location
-}
+# 4. Python environment ---------------------------------------------------
+Write-Step "Installing Python interpreter + dependencies..."
+& (Join-Path $RepoDir 'setup.ps1')
 Write-Ok "Environment ready."
 
 # 5. Done -----------------------------------------------------------------

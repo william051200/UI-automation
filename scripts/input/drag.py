@@ -23,6 +23,9 @@ except Exception:
         pass
 
 import pyautogui
+pyautogui.FAILSAFE = False  # this RDP session can report cursor position as
+# (0, 0) even when not actually stuck at a corner, which would otherwise
+# permanently trip pyautogui's fail-safe abort.
 
 
 def main():

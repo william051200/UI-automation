@@ -1,6 +1,10 @@
 """Type a literal text string into the focused window."""
 import argparse, sys
 import pyautogui
+pyautogui.FAILSAFE = False  # this environment (RDP session without an actively
+# tracked cursor) can report the mouse position as (0, 0) -- a screen corner --
+# even when nothing is actually stuck there, which would otherwise permanently
+# trip pyautogui's fail-safe abort.
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
