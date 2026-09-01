@@ -1,0 +1,8 @@
+# CONFIG
+Section,Key,Value
+name,,e2e-1-verify_dotnet_info
+description,,"Run `dotnet --info`, save its raw output as both a text file and a PNG ""screenshot"" in the artifact dir, and verify every version under `.NET SDKs installed:` and `.NET runtimes installed:` matches major.minor.patch (no build suffixes such as `-servicing-xxxxx.xx`)."
+
+# STEPS
+No,step no,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected
+1,1,Verify dotnet --info,"Run `dotnet --info`, save raw output as text + PNG, and assert every SDK / runtime version is major.minor.patch.",scripts/dotnet/assert_info_versions.py,"[""--save-text"", ""{artifacts.screenshot_dir}/dotnet_info.txt"", ""--save-image"", ""{artifacts.screenshot_dir}/dotnet_info.png""]",,,,,,,,,,All listed versions match ^\d+\.\d+\.\d+$; raw output archived alongside.

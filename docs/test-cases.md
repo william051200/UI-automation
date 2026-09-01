@@ -6,6 +6,7 @@ Directory of the declarative scenarios under [`test_cases/`](../test_cases), con
 
 | Type | ID | Test case | Purpose |
 |---|---:|---|---|
+| E2E | 1 | [`e2e-1-verify_dotnet_info.csv`](../test_cases/e2e-1-verify_dotnet_info.csv) | Runs `dotnet --info`, archives its output as text and an image, and verifies that every installed SDK and runtime uses a stable `major.minor.patch` version. |
 | E2E | 3 | [`e2e-3-template-test.csv`](../test_cases/e2e-3-template-test.csv) | Verifies the latest .NET framework offered by the Visual Studio Insiders MAUI and Console App project wizards, then builds and runs the console app. |
 | Productivity | 1 | [`prod-1-cs_console_app.csv`](../test_cases/prod-1-cs_console_app.csv) | Creates a C# Console App in Visual Studio, validates its project settings, applies code changes with Hot Reload, and verifies the updated output. |
 | Productivity | 2 | [`prod-2-hot_reload.csv`](../test_cases/prod-2-hot_reload.csv) | Creates and runs a Razor Pages project, edits its page model and markup, applies Hot Reload, and verifies the updated browser content. |
