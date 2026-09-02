@@ -94,6 +94,32 @@ troubleshooting: [`docs/REMOTE_RUNNING.md`](docs/REMOTE_RUNNING.md).
 
 If you have [GitHub Copilot CLI](https://github.com/github/gh-copilot) (or any other agent that reads `AGENTS.md`) installed, you can drive the toolkit conversationally. The repo's [`AGENTS.md`](AGENTS.md) is auto-loaded and contains the rules the agent must follow when authoring or editing test cases. For the human-facing workflow and example prompts, see [`docs/authoring-scenarios.md`](docs/authoring-scenarios.md).
 
+### Standard Copilot prompts
+
+**Convert a rough CSV test case:**
+
+```text
+Use the csv-test-formatter skill.
+TARGET FILE: test_cases\drafts\<name>.csv
+OUTPUT FILE: test_cases\<name>.csv
+```
+
+**Convert a Markdown test case:**
+
+```text
+Use the csv-test-formatter skill.
+TARGET FILE: test_cases\drafts\<name>.md
+OUTPUT FILE: test_cases\<name>.csv
+```
+
+**Run and repair a test case:**
+
+```text
+Use the test-case-repair skill.
+TARGET FILE: test_cases\<name>.csv
+REPORT FILE: result\<name>.html
+```
+
 ### Install the Copilot CLI
 
 Don't have it yet? Run the bundled installer. It sets up **both** the standalone agentic `copilot` CLI and the `gh copilot` extension (whichever is missing), then walks you through login:

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UI Automation Repair Report Example</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 1200px; padding: 0 1rem; color: #24292f; }
+    .summary { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
+    .card { border: 1px solid #d0d7de; border-radius: 0.5rem; padding: 1rem; min-width: 10rem; }
+    .label { color: #57606a; font-size: 0.875rem; }
+    .value { display: block; margin-top: 0.25rem; font-size: 1.25rem; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d0d7de; padding: 0.75rem; text-align: left; vertical-align: top; }
+    th { background: #f6f8fa; }
+    .pass { color: #1a7f37; font-weight: 700; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>UI Automation Repair Report Example</h1>
+  <p><strong>Test case:</strong> <code>test_cases\console_app.csv</code></p>
+
+  <section class="summary" aria-label="Run summary">
+    <div class="card">
+      <span class="label">Final result</span>
+      <span class="value pass">PASS</span>
+    </div>
+    <div class="card">
+      <span class="label">Total run attempts</span>
+      <span class="value">4</span>
+    </div>
+    <div class="card">
+      <span class="label">Total run time</span>
+      <span class="value">14m 23s</span>
+    </div>
+    <div class="card">
+      <span class="label">Repairs applied</span>
+      <span class="value">3</span>
+    </div>
+    <div class="card">
+      <span class="label">Final verification</span>
+      <span class="value">Full test passed</span>
+    </div>
+  </section>
+
+  <h2>Repair history</h2>
+  <table>
+    <caption>Failures observed and the repairs applied before the final successful run.</caption>
+    <thead>
+      <tr>
+        <th scope="col">Attempt</th>
+        <th scope="col">Failed step and action</th>
+        <th scope="col">Observed failure</th>
+        <th scope="col">Evidence</th>
+        <th scope="col">CSV change</th>
+        <th scope="col">Next run</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><code>step_14</code><br>Select the Console App template.</td>
+        <td>The Console App template control was not found because pressing Enter had already advanced the wizard to project configuration.</td>
+        <td>The failure occurred after the wizard changed pages; the template result was no longer present in the captured UI tree.</td>
+        <td>Removed the Enter submission so Visual Studio's automatic filtering leaves the template result available.</td>
+        <td>The template selection passed; the run continued to <code>step_36</code>.</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>step_36</code><br>Verify the project's target framework.</td>
+        <td>The project Properties framework control returned no text because the project context-menu path did not open the project designer.</td>
+        <td>The expected Target framework ComboBox was absent after using the context-menu path.</td>
+        <td>Used the live-discovered Project menu and generated-project Properties item, then waited for the Target framework ComboBox before reading it.</td>
+        <td>The framework check passed; the run continued to <code>step_44</code>.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><code>step_44</code><br>Find the debug console window.</td>
+        <td>The spawned debug console used <code>ConsoleWindowClass</code> instead of <code>CASCADIA_HOSTING_WINDOW_CLASS</code>.</td>
+        <td>Window discovery showed the expected title under <code>ConsoleWindowClass</code>.</td>
+        <td>Matched a non-exact Visual Studio console title together with the observed <code>ConsoleWindowClass</code>.</td>
+        <td>The complete test passed.</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

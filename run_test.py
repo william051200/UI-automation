@@ -125,8 +125,19 @@ def render(value, subs):
     return _expr_re.sub(repl, value)
 
 
+def script_path(script):
+    """Resolve a repository script and reject missing or escaping paths."""
+    if not script:
+        raise ValueError("step has no script")
+    path = os.path.abspath(script if os.path.isabs(script)
+                           else os.path.join(ROOT, script))
+    if not os.path.isfile(path):
+        raise ValueError(f"script not found: {script}")
+    return path
+
+
 def run_cmd(script, args, expect_exit=0):
-    cmd = [PY, os.path.join(ROOT, script)] + [str(a) for a in args]
+    cmd = [PY, script_path(script)] + [str(a) for a in args]
     if not QUIET:
         print(f"  $ {' '.join(cmd)}")
     p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -149,14 +160,18 @@ def capture(out_text, mapping, ctx):
     first_cols = rows[0] if rows else []
     for dst, sel in mapping.items():
         m = re.fullmatch(r"\$\.cols\[(\d+)\]", sel)
-        if m:
-            val = first_cols[int(m.group(1))]
-        else:
-            m = re.fullmatch(r"\$\.rows\[(\d+)\]\.cols\[(\d+)\]", sel)
+        try:
             if m:
-                val = rows[int(m.group(1))][int(m.group(2))]
+                val = first_cols[int(m.group(1))]
             else:
-                raise ValueError(f"bad selector: {sel}")
+                m = re.fullmatch(r"\$\.rows\[(\d+)\]\.cols\[(\d+)\]", sel)
+                if m:
+                    val = rows[int(m.group(1))][int(m.group(2))]
+                else:
+                    raise ValueError(f"bad selector: {sel}")
+        except IndexError as exc:
+            raise ValueError(
+                f"capture selector {sel} did not match script output") from exc
         if dst.startswith("vars."):
             ctx.vars[dst[5:]] = val
         else:
@@ -198,7 +213,7 @@ def exec_step(step, ctx, local_subs):
             cargs = [render(a, csubs) for a in cond.get("args", [])]
             if not QUIET:
                 print(f"  ? {' '.join([cscript] + [str(x) for x in cargs])}")
-            cp = subprocess.run([PY, os.path.join(ROOT, cscript)] + [str(a) for a in cargs],
+            cp = subprocess.run([PY, script_path(cscript)] + [str(a) for a in cargs],
                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
             if cp.returncode != cexit:
                 if not QUIET:
@@ -252,7 +267,7 @@ def exec_step(step, ctx, local_subs):
         deadline = time.time() + total
         last = ""
         while time.time() < deadline:
-            p = subprocess.run([PY, os.path.join(ROOT, script)] + args,
+            p = subprocess.run([PY, script_path(script)] + args,
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             last = p.stdout
             if target in last:

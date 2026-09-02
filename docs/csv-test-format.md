@@ -1,5 +1,9 @@
 # CSV test-case format
 
+## Source of truth
+
+`scripts/csvfmt/csv_schema.py` defines the executable CSV contract. `test_cases/_template.csv` is the canonical starter example. `AGENTS.md` defines authoring behavior.
+
 Test cases are plain-text **CSV** — the version-control-friendly, **hand-authored source of truth**. `run.ps1` loads a `.csv` spec directly into the runner (in memory) and runs it.
 
 ```powershell
@@ -25,9 +29,9 @@ name,,sample_test
 description,,"Describe the UI-automation scenario."
 
 # STEPS
-No,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,Expected
-1,Launch powershell,Open Start menu via Win key.,scripts/input/key.py,"[""win""]",700,,,,,,,,
-1,,Type 'powershell' into the Start menu.,scripts/input/type_text.py,"[""powershell""]",1200,,,,,,,,
+No,step no,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected
+1,1,Launch powershell,Open Start menu via Win key.,scripts/input/key.py,"[""win""]",700,,,,,,,,,
+1,2,,Type 'powershell' into the Start menu.,scripts/input/type_text.py,"[""powershell""]",1200,,,,,,,,,
 ```
 
 ### `# CONFIG` section
@@ -46,7 +50,7 @@ No `inputs`, `timing`, or `expected_results` block — those values live on the 
 
 ### `# STEPS` section
 
-One row per runnable step, in execution order. A row with a blank `script` is skipped.
+One row per runnable step, in execution order. Strict validation requires every step row to have a script.
 
 Readable columns (authoring-facing, **ignored on import**):
 
@@ -86,11 +90,11 @@ Prefer unrolling. When the repetition count is **not known ahead of time** — e
 
 ```
 # STEPS
-No,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected
-# LOOP,Drain list,While a Vulnerable row exists capture its coords.,scripts/uia/find_control.py,"[""{vars.hwnd}"", ""--name"", ""Vulnerable"", ""--control-type"", ""ListItem""]",,"{""vars.row_x"": ""$.rows[1].cols[7]"", ""vars.row_y"": ""$.rows[1].cols[8]""}",0,,,,,,10,Loop while a vulnerable row exists.
-2,,Click the captured row.,scripts/input/click.py,"[""{vars.row_x}"", ""{vars.row_y}""]",200,,,,,,,,,
-2,,Press enter to update it.,scripts/input/key.py,"[""enter""]",200,,,,,,,,,
-# END LOOP,,,,,,,,,,,,,,
+No,step no,Main step,Trigger,script,args,wait_ms,capture,expect_exit,expected_contains,poll_total_ms,poll_interval_ms,screenshot_pass,screenshot_fail,max_iter,Expected
+# LOOP,1,Drain list,While a Vulnerable row exists capture its coords.,scripts/uia/find_control.py,"[""{vars.hwnd}"", ""--name"", ""Vulnerable"", ""--control-type"", ""ListItem""]",,"{""vars.row_x"": ""$.rows[1].cols[7]"", ""vars.row_y"": ""$.rows[1].cols[8]""}",0,,,,,,10,Loop while a vulnerable row exists.
+2,2,,Click the captured row.,scripts/input/click.py,"[""{vars.row_x}"", ""{vars.row_y}""]",200,,,,,,,,,
+2,3,,Press enter to update it.,scripts/input/key.py,"[""enter""]",200,,,,,,,,,
+# END LOOP,,,,,,,,,,,,,,,
 ```
 
 Rules:
@@ -105,7 +109,7 @@ Rules:
 
 | Component | Purpose |
 |---|---|
-| `scripts\csvfmt\csv_loader.py` | Parses a CSV into the runner's spec dict. Run `uv run python scripts\csvfmt\csv_loader.py <file.csv>` to print the parsed spec as JSON for debugging. |
+| `scripts\csvfmt\csv_loader.py` | Strictly validates a CSV, then prints the parsed runner spec. Run `uv run python scripts\csvfmt\csv_loader.py <file.csv>`. |
 | `scripts\csvfmt\csv_schema.py` | Shared section markers and column layout. |
 | `.github\skills\csv-test-formatter\SKILL.md` | Skill that reformats a rough CSV into this layout. |
 | `test_cases\_template.csv` | Skeleton to copy when authoring by hand. |
@@ -116,3 +120,4 @@ Rules:
 - Complex cell values (`args`, `capture`, screenshot patterns) are stored as JSON so they stay lossless; the `csv` module quotes/escapes them safely.
 - `wait_ms` / `poll_*_ms` are raw integer milliseconds.
 - Keep waits minimal: prefer polling assertions (`expected_contains` + `poll_total_ms`/`poll_interval_ms`, or `wait_for`) over long fixed `wait_ms`, and when a fixed wait is needed use the smallest reliable value plus a small safety margin rather than padding.
+- Strict validation rejects wrong headers, unsupported config, missing descriptions or scripts, non-sequential step numbers, missing script files, invalid JSON or numeric fields, and malformed loops.

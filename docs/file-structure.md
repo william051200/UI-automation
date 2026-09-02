@@ -19,6 +19,7 @@ A guided tour of every file and folder in this repo, so you can find your way ar
 | `.gitignore` | Excludes `.venv/`, `screenshots/`, and other local artifacts from git. |
 | `.venv/` | Local virtual environment created by `uv sync` (not committed). |
 | `screenshots/` | Per-run screenshot artifacts written under `screenshots/<name>-<timestamp>/` (not committed). |
+| `result/` | HTML results written by the test-case repair skill; generated reports are not committed, while the example report is tracked. |
 | `docs/` | Markdown documentation — see [docs/](#docs). |
 | `ops/` | Operational PowerShell scripts and the offline wheelhouse for installation, dependency setup, runner lifecycle management, and run cleanup. |
 | `scripts/` | Primitive Python helpers invoked by `run_test.py`, grouped into category subfolders — see [scripts/](#scripts) and [scripts-reference.md](scripts-reference.md). |

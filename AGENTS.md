@@ -8,15 +8,18 @@ This file follows the [agents.md](https://agents.md/) convention and is loaded a
 
 `ui-auto` is a declarative UI-automation toolkit for Windows desktop apps. Test cases are CSV files in `test_cases/`, executed by `run_test.py` (entry point: `.\run.ps1 <spec>`). Each step in a spec maps to a script under `scripts/`.
 
-## Authoritative references (read on demand, not eagerly)
+## Ownership and references
 
-- `README.md` — install, run, top-level usage.
-- `docs/csv-test-format.md` — CSV spec layout (`# CONFIG`/`# STEPS` sections, columns, step types, placeholders, capture syntax); the runner loads CSV directly via the in-memory loader in `scripts/csvfmt/`, and the `csv-test-formatter` skill (`.github/skills/`) reformats rough CSV into the standard layout.
+- `scripts/csvfmt/csv_schema.py` — executable CSV markers and columns.
+- `test_cases/_template.csv` — canonical starter example.
+- `AGENTS.md` — mandatory authoring behavior.
+- `docs/csv-test-format.md` — human-readable CSV format explanation.
+- `.github/skills/` — task procedures for conversion and repair.
+- `README.md` — install, run, and top-level usage.
 - `docs/authoring-scenarios.md` — how to author a test case by describing plain steps to an AI agent (Copilot CLI, etc.).
 - `docs/file-structure.md` — what every file/folder is for.
 - `docs/reproducibility.md` — why runs must be bit-identical.
 - `docs/troubleshooting.md` — DPI, multi-monitor, UI language gotchas.
-- `test_cases/_template.csv` — canonical test-case layout.
 - `scripts/*.py` — one script per step `type`.
 
 ## Hard rules when authoring or editing a test case
@@ -29,14 +32,21 @@ This file follows the [agents.md](https://agents.md/) convention and is loaded a
 6. Artifact paths use `{timestamp}` (substituted at run start, UTC) and `{name}` (the CONFIG `name` value). Default screenshot dir: `screenshots/{name}-{timestamp}` — don't add an `artifacts,screenshot_dir` row unless a test case genuinely needs a custom location; leaving it out keeps the standard `<name>-<timestamp>` folder naming so screenshots are easy to trace back to their test case. For ordered screenshot names use the `{ss}` placeholder in `screenshot_pass` / `screenshot_fail` filenames (renders `ss_1`, `ss_2`, ...; continuous across the whole run including loops, so it never restarts — optionally add `{n}` for the iteration index, e.g. `{ss}_{n}_name.png`).
 7. For console assertions set the `expected_contains` column (with `poll_total_ms` / `poll_interval_ms` in literal milliseconds).
 8. For file assertions use `assert_file` (supports `--negate`, `--contains`, `--delete`).
-9. Do **not** invent new step types. If something doesn't fit, ask before extending the schema.
+9. During conversion, do **not** invent new scripts or step types. During evidence-backed repair, invoke `test-script-developer` when existing scripts cannot handle the observed behavior. Schema changes still require user approval.
 10. When emitting a new test case, output ONE complete CSV in a single fenced block; no surrounding prose unless the user asks for an explanation.
 11. **Minimize waits.** When a step has an observable completion state, use a polling assertion (`expected_contains` with `poll_total_ms`/`poll_interval_ms`, or `wait_for`), especially for asynchronous operations such as app/window launch, build/compile, project scaffolding, or other heavy IDE work. To tolerate slower machines, raise `poll_total_ms` rather than adding `wait_ms`; polling exits early when the condition is met, while a fixed wait always consumes its full duration. Keep `poll_interval_ms` responsive (typically 200-500ms). Use fixed `wait_ms` only when no completion state can be observed, setting it from the observed worst-case duration plus a modest safety margin. Adjust only steps with evidence of timing risk—never blanket-pad waits, randomize values, or vary them between runs.
 12. **Keep paths machine-portable.** Never hardcode a user/profile path (e.g. `C:\Users\<you>`) — resolve the home dir via `scripts/files/print_home.py`, capture `{vars.home}`, and build absolute paths from it. Locate Visual Studio via `scripts/window/find_devenv.py` → `{vars.devenv}` rather than a literal install path. Use `{timestamp}` for artifact dirs, match window titles by regex (not user-specific text), and discover machine-varying values (SDK/runtime versions, drive letters) at runtime instead of baking them in, so a case authored on one PC/user runs unchanged on another.
+13. **Do not inspect existing converted test cases when converting a rough CSV or Markdown file.** Use only the supplied rough source, `scripts/csvfmt/csv_schema.py`, `test_cases/_template.csv`, `docs/csv-test-format.md`, and relevant scripts under `scripts\`. Existing test cases may contain scenario-specific assumptions and are not conversion references unless the user explicitly asks to use one.
+
+## Raw test case location
+
+Store rough input CSV or Markdown files under `test_cases\drafts\`. Convert `test_cases\drafts\<name>.csv` or `test_cases\drafts\<name>.md` to `test_cases\<name>.csv` using the same base filename. If the user provides an explicit output path, use it instead. If only one draft path is provided, infer the output path automatically; ask only when the source or destination is ambiguous.
 
 ## Iterating on failures
 
 When the user pastes back a failing step id + stderr, respond with the **smallest diff** that fixes that step only. Do not re-emit the whole file unless the structure itself is wrong.
+
+If the failure proves an existing script lacks the required behavior, use `.github/skills/test-script-developer/SKILL.md`; add or extend one script without changing existing defaults, add its unit test, update only the failed CSV row, then resume `test-case-repair`.
 
 ## Running tests and the runner
 

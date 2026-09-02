@@ -1,6 +1,7 @@
 """Tests for the standard-format CSV loader (readable phase format)."""
 import os
 import sys
+import tempfile
 import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -115,6 +116,74 @@ class CsvLoaderLoopTests(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
 
 
+class CsvValidationTests(unittest.TestCase):
+    HEADER = ",".join(csv_loader.S.STEPS_COLUMNS)
+
+    def validate_text(self, text):
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".csv", encoding="utf-8",
+                newline="", delete=False) as f:
+            f.write(text)
+            path = f.name
+        try:
+            csv_loader.validate(path)
+        finally:
+            os.unlink(path)
+
+    def csv(self, step_row):
+        return (
+            "# CONFIG\n"
+            "Section,Key,Value\n"
+            "name,,example\n"
+            "description,,Example test\n"
+            "artifacts,screenshot_dir,screenshots/{timestamp}\n\n"
+            "# STEPS\n"
+            f"{self.HEADER}\n"
+            f"{step_row}\n"
+        )
+
+    def test_accepts_canonical_csv(self):
+        self.validate_text(self.csv(
+            '1,1,Launch,Press a key.,scripts/input/key.py,"[""win""]",'
+            '100,,,,,,,,,'))
+
+    def test_rejects_wrong_header(self):
+        text = self.csv(
+            '1,1,Launch,Press a key.,scripts/input/key.py,"[""win""]",'
+            '100,,,,,,,,,').replace("No,step no,", "No,")
+        with self.assertRaisesRegex(ValueError, "header must be"):
+            self.validate_text(text)
+
+    def test_rejects_nonsequential_step_number(self):
+        with self.assertRaisesRegex(ValueError, "step no must be 1"):
+            self.validate_text(self.csv(
+                '1,2,Launch,Press a key.,scripts/input/key.py,"[""win""]",'
+                '100,,,,,,,,,'))
+
+    def test_rejects_missing_or_unknown_script(self):
+        with self.assertRaisesRegex(ValueError, "script is required"):
+            self.validate_text(self.csv("1,1,Launch,Press a key.,,,,,,,,,,,,"))
+        with self.assertRaisesRegex(ValueError, "script does not exist"):
+            self.validate_text(self.csv(
+                "1,1,Launch,Press a key.,scripts/input/missing.py,,"
+                "100,,,,,,,,,"))
+
+    def test_rejects_invalid_json_and_negative_wait(self):
+        with self.assertRaisesRegex(ValueError, "args is not valid JSON"):
+            self.validate_text(self.csv(
+                "1,1,Launch,Press a key.,scripts/input/key.py,not-json,"
+                "100,,,,,,,,,"))
+        with self.assertRaisesRegex(ValueError, "wait_ms must be"):
+            self.validate_text(self.csv(
+                '1,1,Launch,Press a key.,scripts/input/key.py,"[""win""]",'
+                '-1,,,,,,,,,'))
+
+    def test_rejects_unclosed_loop(self):
+        row = (
+            '# LOOP,1,Repeat,Find control.,scripts/uia/find_control.py,'
+            '"[""0"", ""--name"", ""x""]",,,,,,,,,5,')
+        with self.assertRaisesRegex(ValueError, "missing # END LOOP"):
+            self.validate_text(self.csv(row))
 class CsvLoaderNestedLoopTests(unittest.TestCase):
     NESTED_LOOP_CSV = os.path.join(REPO_ROOT, "tests", "fixtures", "nested_loop_example.csv")
 

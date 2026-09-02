@@ -15,12 +15,28 @@ This works with [GitHub Copilot CLI](https://github.com/github/gh-copilot) or an
 
 ## The flow
 
-1. **Write your scenario as plain numbered steps** — one action per line, in the order a human would perform them. Mention the app to open, what to type/click, what to assert, and when to screenshot.
-2. **Ask the agent to convert and validate** — point it at a filename under `test_cases/` and let it produce the CSV and run it.
-3. **Let it run** — the agent saves the CSV and executes `.\run.ps1 test_cases\<name>.csv -q` (no LLM in the run loop). The rules in `AGENTS.md` keep the output reproducible.
-4. **On failure, paste the failing step id + stderr back** and ask for a targeted fix. Don't let it re-emit the whole file unless the structure itself is wrong.
+1. **Write your scenario as plain numbered steps** — one action per line, in the order a human would perform them. Mention the app to open, what to type or click, what to assert, and when to screenshot.
+2. **Save it as a rough CSV** — use `test_cases\drafts\<name>.csv`.
+3. **Ask the agent to convert and validate** — use the standard conversion prompt below.
+4. **Run the generated CSV** — execute `.\run.ps1 test_cases\<name>.csv -q`.
+5. **Repair failures separately** — ask the agent to use the `test-case-repair` skill.
 
 You never hand-write `script` paths, `args`, or UIA selectors — the agent picks them (it discovers selectors via Inspect.exe / the `auto_id + name` pattern) and fills in the CSV columns. For the CSV layout itself, see [csv-test-format.md](csv-test-format.md).
+
+## Standard conversion prompt
+
+Save the raw CSV under `test_cases\drafts\`, then replace `<name>` with the file's base name:
+
+```text
+Use the csv-test-formatter skill.
+Source file: test_cases\drafts\<name>.csv
+```
+
+Copilot writes `test_cases\<name>.csv` automatically. To use another destination, add:
+
+```text
+Output file: <OUTPUT_FILE>
+```
 
 ## Worked example
 
@@ -48,11 +64,14 @@ A smaller Notepad example: give the agent steps like this:
 5. Close Notepad by clicking the Close button.
 ```
 
-Then prompt:
+Save those steps as `test_cases\drafts\notepad_save.csv`, then use:
 
-> Convert these steps into a CSV test case at `test_cases/notepad_save.csv` and validate it by running `.\run.ps1 test_cases\notepad_save.csv -q`. Report only the exit code and any FAIL lines.
+```text
+Use the csv-test-formatter skill.
+Source file: test_cases\drafts\notepad_save.csv
+```
 
-The agent writes `test_cases/notepad_save.csv`, runs it, and reports the result.
+The agent writes and structurally validates `test_cases\notepad_save.csv`. Run it separately with `.\run.ps1 test_cases\notepad_save.csv -q`.
 
 ## More example prompts
 
@@ -70,7 +89,7 @@ The agent writes `test_cases/notepad_save.csv`, runs it, and reports the result.
 
 ## How the agent knows the rules
 
-`AGENTS.md` is auto-loaded on session start and tells the agent the CSV layout, the reproducibility constraints (no randomness), and the selector conventions. Everything under `docs/`, `scripts/`, and `test_cases/` is read on demand. For Copilot-only tweaks, add `.github/copilot-instructions.md`.
+`AGENTS.md` is auto-loaded on session start and defines authoring behavior such as reproducibility and selector conventions. `scripts/csvfmt/csv_schema.py` defines the CSV layout, and the conversion skill reads supporting docs, scripts, and the template on demand.
 
 ## Token-efficient usage
 

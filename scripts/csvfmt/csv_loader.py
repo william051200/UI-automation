@@ -21,6 +21,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import csv_schema as S  # noqa: E402
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REQUIRED_CONFIG = {"name": None, "description": None, "artifacts": "screenshot_dir"}
+JSON_LIST_COLUMNS = ("args", "screenshot_pass", "screenshot_fail")
+NONNEGATIVE_INT_COLUMNS = ("wait_ms", "poll_total_ms", "poll_interval_ms")
+
 
 def _split_sections(rows):
     """Return (config_rows, steps_rows) split on the section markers."""
@@ -38,6 +43,156 @@ def _split_sections(rows):
         if target is not None:
             target.append(row)
     return config_rows, steps_rows
+
+
+def _require_header(rows, expected, section):
+    if not rows:
+        raise ValueError(f"{section} section is empty")
+    header = [str(cell).strip() for cell in rows[0]]
+    if header != expected:
+        raise ValueError(
+            f"{section} header must be: {','.join(expected)}")
+
+
+def _parse_json(cell, column, row_number, expected_type):
+    if S.blank(cell):
+        return
+    try:
+        value = json.loads(cell)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"row {row_number}: {column} is not valid JSON: {exc.msg}") from exc
+    if not isinstance(value, expected_type):
+        name = "list" if expected_type is list else "object"
+        raise ValueError(f"row {row_number}: {column} must be a JSON {name}")
+    if column == "capture":
+        for dst, selector in value.items():
+            if not str(dst).startswith("vars."):
+                raise ValueError(
+                    f"row {row_number}: capture destination must start with vars.")
+            if not isinstance(selector, str) or not (
+                    selector.startswith("$.cols[") or
+                    selector.startswith("$.rows[")):
+                raise ValueError(
+                    f"row {row_number}: invalid capture selector {selector!r}")
+
+
+def _validate_script(script, row_number):
+    normalized = str(script).replace("/", os.sep).replace("\\", os.sep)
+    if os.path.isabs(normalized) or normalized.split(os.sep)[0] != "scripts":
+        raise ValueError(
+            f"row {row_number}: script must be a repository-relative path under scripts")
+    path = os.path.abspath(os.path.join(REPO_ROOT, normalized))
+    scripts_root = os.path.join(REPO_ROOT, "scripts")
+    if os.path.commonpath((path, scripts_root)) != scripts_root:
+        raise ValueError(f"row {row_number}: script escapes the scripts directory")
+    if not os.path.isfile(path):
+        raise ValueError(f"row {row_number}: script does not exist: {script}")
+
+
+def _validate_config(config_rows):
+    _require_header(config_rows, S.CONFIG_COLUMNS, S.CONFIG_MARKER)
+    found = {}
+    for row_number, raw in enumerate(config_rows[1:], start=3):
+        section = str(_cell(raw, 0) or "").strip()
+        key = str(_cell(raw, 1) or "").strip()
+        value = _cell(raw, 2)
+        if section not in REQUIRED_CONFIG:
+            raise ValueError(f"row {row_number}: unsupported config section {section!r}")
+        expected_key = REQUIRED_CONFIG[section]
+        if key != (expected_key or ""):
+            raise ValueError(
+                f"row {row_number}: {section} key must be {expected_key or 'blank'}")
+        if section in found:
+            raise ValueError(f"row {row_number}: duplicate config section {section!r}")
+        if S.blank(value):
+            raise ValueError(f"row {row_number}: {section} value is required")
+        found[section] = value
+    missing = set(REQUIRED_CONFIG) - set(found)
+    if missing:
+        raise ValueError(f"missing config section(s): {', '.join(sorted(missing))}")
+
+
+def _validate_steps(steps_rows):
+    _require_header(steps_rows, S.STEPS_COLUMNS, S.STEPS_MARKER)
+    header = S.STEPS_COLUMNS
+    expected_step = 1
+    in_loop = False
+    loop_has_body = False
+
+    for row_number, raw in enumerate(steps_rows[1:], start=2):
+        cells = {header[i]: _cell(raw, i) for i in range(len(header))}
+        marker = str(_cell(raw, 0) or "").strip().upper()
+        if marker == S.LOOP_END_MARKER:
+            if not in_loop:
+                raise ValueError(f"steps row {row_number}: unmatched # END LOOP")
+            if not loop_has_body:
+                raise ValueError(f"steps row {row_number}: loop body is empty")
+            in_loop = False
+            continue
+
+        is_loop = marker == S.LOOP_START_MARKER
+        if is_loop:
+            if in_loop:
+                raise ValueError(f"steps row {row_number}: nested loops are not supported")
+            in_loop = True
+            loop_has_body = False
+        elif in_loop:
+            loop_has_body = True
+
+        if S.blank(cells["script"]):
+            raise ValueError(f"steps row {row_number}: script is required")
+        if S.blank(cells["Trigger"]):
+            raise ValueError(f"steps row {row_number}: Trigger is required")
+        if str(cells["step no"] or "").strip() != str(expected_step):
+            raise ValueError(
+                f"steps row {row_number}: step no must be {expected_step}")
+        expected_step += 1
+        _validate_script(cells["script"], row_number)
+
+        for column in JSON_LIST_COLUMNS:
+            _parse_json(cells[column], column, row_number, list)
+        _parse_json(cells["capture"], "capture", row_number, dict)
+
+        for column in NONNEGATIVE_INT_COLUMNS:
+            if not S.blank(cells[column]):
+                value = str(cells[column]).strip()
+                if not value.isdigit():
+                    raise ValueError(
+                        f"steps row {row_number}: {column} must be a non-negative integer")
+        if not S.blank(cells["expect_exit"]):
+            try:
+                int(cells["expect_exit"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"steps row {row_number}: expect_exit must be an integer") from exc
+        if not S.blank(cells["max_iter"]):
+            value = str(cells["max_iter"]).strip()
+            if not is_loop:
+                raise ValueError(
+                    f"steps row {row_number}: max_iter is only valid on # LOOP rows")
+            if not value.isdigit() or int(value) < 1:
+                raise ValueError(
+                    f"steps row {row_number}: max_iter must be a positive integer")
+
+    if in_loop:
+        raise ValueError("missing # END LOOP")
+    if expected_step == 1:
+        raise ValueError("test case has no executable steps")
+
+
+def validate(csv_path):
+    """Validate a newly authored CSV against the canonical repository contract."""
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    markers = [str(row[0]).strip().upper() for row in rows if row]
+    if markers.count(S.CONFIG_MARKER) != 1 or markers.count(S.STEPS_MARKER) != 1:
+        raise ValueError("CSV must contain exactly one # CONFIG and one # STEPS marker")
+    if markers.index(S.CONFIG_MARKER) > markers.index(S.STEPS_MARKER):
+        raise ValueError("# CONFIG must appear before # STEPS")
+    config_rows, steps_rows = _split_sections(rows)
+    _validate_config(config_rows)
+    _validate_steps(steps_rows)
 
 
 def _cell(row, i):
@@ -230,8 +385,10 @@ def _build_config(config_rows):
     return spec
 
 
-def load(csv_path):
+def load(csv_path, strict=False):
     """Parse a standard-format CSV test case into a runnable spec dict."""
+    if strict:
+        validate(csv_path)
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         rows = list(csv.reader(f))
     config_rows, steps_rows = _split_sections(rows)
@@ -252,7 +409,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("csv")
     a = ap.parse_args()
-    spec = load(a.csv)
+    spec = load(a.csv, strict=True)
     json.dump(spec, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
 

@@ -179,6 +179,15 @@ find_control.py <hwnd> [--name N] [--auto-id A] [--control-type T] [--class C]
                        [--parent-hwnd HWND] [--all | --nth N] [--name-fallback]
 ```
 
+### `invoke_control.py` — invoke a UIA control
+Invokes a matching control, falling back to a mouse click when the Invoke pattern is unavailable. `--timeout-ms` polls for controls that appear asynchronously. `--optional` exits successfully with a clear skip message when the control remains absent; without it, absence remains an error.
+
+```
+invoke_control.py <hwnd> [--name N] [--auto-id A] [--control-type T]
+                         [--match exact|contains|regex] [--optional]
+                         [--timeout-ms N] [--poll-ms N]
+```
+
 ### `toggle_check.py` — set a CheckBox state
 Sets a UIA CheckBox to a desired state via the Toggle pattern (not a coordinate click), so it reliably ticks boxes whose square is at a wide row's edge (e.g. VS Reference Manager). Same selector model as `find_control.py`. Prints the final state; exit 1 if not found, 2 on error.
 
