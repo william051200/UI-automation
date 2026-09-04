@@ -194,6 +194,15 @@ Selects an item by text via the SelectionItem/ExpandCollapse patterns (not a mou
 select_combo.py <hwnd> [--auto-id A] [--name N] --item TEXT [--match exact|contains|regex]
 ```
 
+### `submenu_verify_checked.py` — read/verify the checked item in a cascading toolbar menu
+Expands a split-button or menu control (`--root-name`/`--root-type`, e.g. the VS "Debug Target" toolbar button showing "Windows Machine"), then expands a named submenu inside it (`--submenu`, e.g. "Framework") and reads which leaf `MenuItem` is checked. WPF menu items expose exclusive checked state via the legacy MSAA `STATE_SYSTEM_CHECKED` bit rather than the UIA SelectionItem pattern, and leaf items only materialize in the UIA tree while the submenu is open, so this cannot be done with `find_control.py` alone. `list` prints every leaf with its checked flag (`name\t0|1`); `verify-checked --expect TEXT` exits 1 if the checked leaf's name does not equal `TEXT`. The menu is closed (Escape) afterward unless `--keep-open` is given.
+
+```
+submenu_verify_checked.py <hwnd> --root-name N [--root-type SplitButton] --submenu N
+                          [--match exact|contains|regex] [--timeout-ms N] [--keep-open]
+                          (list | verify-checked --expect TEXT)
+```
+
 ### `read_console.py` — dump a window's UIA text
 Prints a window's text, preferring the `Document` control (the console buffer), falling back to legacy properties then all visible text nodes. Validates console output without OCR.
 
