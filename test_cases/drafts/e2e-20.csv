@@ -1,0 +1,50 @@
+1,Search for Visual Studio Insiders in the Start menu.
+2,Launch the `Visual Studio Insiders` in the Start-menu result.
+3,Wait for the Visual Studio Insiders window to appear.
+4,Maximize the Visual Studio window so subsequent UIA looksup are stable.
+5,Start new project (MAUI),Find the `Create a new project` button on the Start Window.
+6,Click `Create a new project`
+7,In the `Create a new project` window Click on the `All languages combo box` and make sure `C#` is selected.
+8,Type `.NET MAUI App` into the search box.
+9,Locate and click the `.NET MAUI App` template item.
+10,Find and click the `Next` button to open `Configure your new project`
+11,In the `Configure your new project` page make sure it is `.NET MAUI App` and click `Next`
+12,In the `Additional Information` window, locate and select the `Framework` combo box drop down.
+13,Click the drop down, to show all the frameworks supported.
+14,The testing loop start here, the dropdown will show different .NET version, (e.g. `.NET10.0 (Long Term Support)`, `.NET9.0 (Standard Term Support)`.). Remember the items listed down. These will be the items need to be tested.
+15,Screenshot
+16,Choose the latest version first, for example between `.NET10.0` and `.NET9.0` choose `.NET10.0` first. Then remove the .NET10.0 from the items remembered in step 14.
+17,Click `Create`.
+18,Verify it is on the Visual Studio IDE window.
+
+(**Install Android SDK Notes**, During this stage, some windows will pop up during the testing: if title `Android SDK - License Agreement`, just click `Accept`, and then `User Account Control, Do you want to allow this app to make changes to your device`, Click `Yes`, and verify back to the previous state then continue the step as usual. Do not Accept or perform any actions if not this pop up, screenshot, fail and exit)
+
+19,Click the `Windows Machine` Drop down button (NOT the Windows Machine button, but the dropdown arrow) on the task bar (located between the Any CPU dropdown, and the Start Without Debugging button).
+20,In the Dropdown, locate and select the `Framework (netxx.x-windowsxxx.xxxxx)` (For e.g. `net10.0-windows10.0.19041.0`)
+21,In the expanded dropdown, Verify by default the `netxx.x-windowsxxx.xxxxx`, is selected. The selected item should match the step 20 Framework (netxx.x-windowsxxx.xxxxx). Take a screenshot here. If not selected by default, fail. Take a screenshot.
+22,In the Solution Explorer side tab, Locate the Solution name, (for e.g. `MauiApp1`, `MauiApp2`, etc.). Double Click it.
+23,In the code editor space, verify the solution tab is activated.
+24,The code content should be starting with this `<Project Sdk="Microsoft.NET.Sdk">`
+25,Take a screenshot.
+26,In the code content, locate the <TargetFrameworks> tag, match the framework selected in Step 16 (For example `.NET10.0`, should match `<TargetFrameworks>net10.0-android</TargetFrameworks>`, if not match, fail).
+27,In the code content, locate the <TargetFrameworks Condition="......"> tag, it should has matching the framework selected in Step 16 (For example `.NET10.0`, should match `<TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>`, if not match, fail)
+28,In the code content, locate the second <TargetFrameworks Condition="......"> tag, it should has matching framework shown in Step 20 and Step 21 (For example, `net10.0-windows10.0.19041.0`, should match `<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>`, if not match, fail)
+29,On the IDE Top task bar, click `Build`.
+30,On the shown drop down, click `Build Solution`.
+31,Verified the Output is updating, do not continue until u see the output `========== Build: 1 succeeded, 0 failed, 0 up-to-date, 0 skipped ==========
+========== Build completed at .... ==========`
+32,Take a screenshot, if success skip to Step 35
+33,If build failed, or have this specific error/warning `The project MauiAppxxx is missing Android SDKs required for building. Double-click on this message and follow the prompts to install them.`, double click on that warning, and follow the **Install Android SDK Notes** steps) before continue. Other errors, fail and exit.
+34,Repeat step 29 to Step 33.
+35,On the Visual Studio IDE top task bar, click `Debug`.
+36,On the shown drop down, click `Start Debugging`.
+37,Verify the MauiAppxx window is opened, with content "Hello, World! Welcome to .NET Multi-platform App UI" and a `Click me` button.
+38,Take a screenshot.
+39,Click the Click me button 5 times, and verify each click changes the button to `Clicked 1 time`, `Clicked 2 times`, `Clicked 3 times`, `Clicked 4 times` and `Clicked 5 times`.
+40,Take a screenshot.
+41,Fail if the button is not updating or the number is incorrect.
+42,Close the MauiAppxx window.
+43,Close the Visual Studio IDE.
+44,Verify no more Visual Studio Insiders is opened.
+45,Repeat from Step 1, until all the items in Step 14, has been tested.
+ 
